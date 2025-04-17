@@ -22,4 +22,4 @@ jobs:
           cmake --build build -j $(nproc)
       - name: Run Tests
         run: |
-          cd build && ctest --output-on-failure
+          cd build && ctest --output-on-failur
