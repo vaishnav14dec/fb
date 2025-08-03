@@ -34,6 +34,6 @@ For anything related to the security of the library or bug bounty program please
 
 ## Questions?
 
-If you have questions or need additional guidance please open a GitHub issue.
+If you have questions or need additional guidance please ~~open a GitHub issue~~.
 
 Thank you.
