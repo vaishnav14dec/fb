@@ -29,6 +29,28 @@ TEST_CASE( "basic", "secret_sharing") {
         printf("%s\n", secret2);
     }
 
+    SECTION("only id") {
+        const unsigned char secret[33] = "01234567890123456789012345678912";
+        verifiable_secret_sharing_t *shamir;
+        shamir_secret_share_t share[3];
+        uint64_t ids[3];
+        
+        REQUIRE(verifiable_secret_sharing_split(secp256k1.get(), secret, sizeof(secret) - 1, 3, 5, &shamir) == VERIFIABLE_SECRET_SHARING_SUCCESS);
+        REQUIRE(verifiable_secret_sharing_get_share(shamir, 1, share) == VERIFIABLE_SECRET_SHARING_SUCCESS);
+        REQUIRE(verifiable_secret_sharing_get_share(shamir, 3, share+1) == VERIFIABLE_SECRET_SHARING_SUCCESS);
+        REQUIRE(verifiable_secret_sharing_get_share(shamir, 4, share+2) == VERIFIABLE_SECRET_SHARING_SUCCESS);
+        
+        
+        REQUIRE(verifiable_secret_sharing_get_share_id(shamir, 1, ids) == VERIFIABLE_SECRET_SHARING_SUCCESS);
+        REQUIRE(verifiable_secret_sharing_get_share_id(shamir, 3, ids+1) == VERIFIABLE_SECRET_SHARING_SUCCESS);
+        REQUIRE(verifiable_secret_sharing_get_share_id(shamir, 4, ids+2) == VERIFIABLE_SECRET_SHARING_SUCCESS);
+
+        REQUIRE(share[0].id == ids[0]);
+        REQUIRE(share[1].id == ids[1]);
+        REQUIRE(share[2].id == ids[2]);
+        verifiable_secret_sharing_free_shares(shamir);
+    }
+
     SECTION("not enough") {
         const unsigned char secret[33] = "01234567890123456789012345678912";
         unsigned char secret2[33] = {0};

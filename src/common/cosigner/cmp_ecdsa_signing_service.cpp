@@ -25,7 +25,7 @@ cmp_ecdsa_signing_service::~cmp_ecdsa_signing_service()
 {
 }
 
-cmp_mta_request cmp_ecdsa_signing_service::create_mta_request(ecdsa_signing_data& data, const elliptic_curve256_algebra_ctx_t* algebra, uint64_t my_id, const std::vector<uint8_t>& aad, const cmp_key_metadata& metadata, const std::shared_ptr<paillier_public_key_t>& paillier)
+cmp_mta_request cmp_ecdsa_signing_service::create_mta_request(ecdsa_preprocessing_data& data, const elliptic_curve256_algebra_ctx_t* algebra, uint64_t my_id, const std::vector<uint8_t>& aad, const cmp_key_metadata& metadata, const std::shared_ptr<paillier_public_key_t>& paillier)
 {
     throw_cosigner_exception(algebra->rand(algebra, &data.k.data));
     throw_cosigner_exception(algebra->rand(algebra, &data.a.data));
@@ -86,8 +86,16 @@ void cmp_ecdsa_signing_service::ack_mta_request(uint32_t count, const std::map<u
     SHA256_Final(ack, &ctx);
 }
 
-cmp_mta_response cmp_ecdsa_signing_service::create_mta_response(ecdsa_signing_data& data, const elliptic_curve256_algebra_ctx_t* algebra, uint64_t my_id, const std::vector<uint8_t>& aad, const cmp_key_metadata& metadata,
-    const std::map<uint64_t, std::vector<cmp_mta_request>>& requests, size_t index, const elliptic_curve_scalar& key, const auxiliary_keys& aux_keys)
+cmp_mta_response cmp_ecdsa_signing_service::create_mta_response(
+    ecdsa_preprocessing_data& data, 
+    const elliptic_curve256_algebra_ctx_t* algebra, 
+    uint64_t my_id, 
+    const std::vector<uint8_t>& aad, 
+    const cmp_key_metadata& metadata,
+    const std::map<uint64_t, std::vector<cmp_mta_request>>& requests, 
+    size_t index, 
+    const elliptic_curve_scalar& key, 
+    const auxiliary_keys& aux_keys)
 {
     cmp_mta_response resp;
     resp.GAMMA = data.GAMMA;
@@ -117,13 +125,13 @@ cmp_mta_response cmp_ecdsa_signing_service::create_mta_response(ecdsa_signing_da
     return resp;
 }
 
-cmp_mta_deltas cmp_ecdsa_signing_service::mta_verify(
-    ecdsa_signing_data& data, //this block singing data
+cmp_mta_deltas cmp_ecdsa_signing_service::verify_block_and_get_delta(
+    ecdsa_preprocessing_data& data, //this block singing data
     const elliptic_curve256_algebra_ctx_t* algebra, 
     uint64_t my_id,
     const std::string& uuid, 
     const std::vector<uint8_t>& aad, //this party's aad
-    const cmp_key_metadata& metadata, //all parties public metadata (public share, paillier, rind pedersen)
+    const cmp_key_metadata& metadata, //all parties public metadata (public share, paillier, ring pedersen)
     const std::map<uint64_t, cmp_mta_responses>& mta_responses, //all responses from all parties
     size_t index,           //this block (message) index
     const auxiliary_keys& aux_keys, 
@@ -134,18 +142,39 @@ cmp_mta_deltas cmp_ecdsa_signing_service::mta_verify(
     {
         if (it->first == my_id)
             continue;
+
+        //other partie parameters
         const auto& other = metadata.players_info.at(it->first);
         auto other_aad = build_aad(uuid, it->first, metadata.seed);
         auto& pub = data.public_data.at(it->first);
-        pub.GAMMA = it->second.response[index].GAMMA;
-        auto& proof_for_me = it->second.response[index].gamma_proofs.at(my_id);
-        paillier_with_range_proof_t proof = {pub.gamma_commitment.data(), (uint32_t)pub.gamma_commitment.size(), (uint8_t*)proof_for_me.data(), (uint32_t)proof_for_me.size()};
-        auto status = range_proof_exponent_zkpok_verify(aux_keys.ring_pedersen.get(), other.paillier.get(), algebra, other_aad.data(), other_aad.size(), &pub.GAMMA.data, &proof);
+        pub.GAMMA = it->second.response[index].GAMMA; //this is g^gamma(index) as sent by the other party
+        auto my_id_it = it->second.response[index].gamma_proofs.find(my_id);
+        if (my_id_it == it->second.response[index].gamma_proofs.end())
+        {
+            LOG_ERROR("Failed to verify gamma log proof from player %" PRIu64 " block %lu, proof does not contain my id", it->first, index);
+            throw_cosigner_exception(ZKP_VERIFICATION_FAILED);
+        }
+        auto& proof_for_me = my_id_it->second;
+        
+        paillier_with_range_proof_t proof = { pub.gamma_commitment.data(), 
+                                              (uint32_t)pub.gamma_commitment.size(), 
+                                              (uint8_t*)proof_for_me.data(), 
+                                              (uint32_t)proof_for_me.size()};
+
+        //verify "log" proof
+        auto status = range_proof_exponent_zkpok_verify(aux_keys.ring_pedersen.get(), //my secret ring pedersen params 
+                                                        other.paillier.get(),         //other partie's public paillier
+                                                        algebra, 
+                                                        other_aad.data(),
+                                                        other_aad.size(), 
+                                                        &pub.GAMMA.data, 
+                                                        &proof);
         if (status != ZKP_SUCCESS)
         {
             LOG_ERROR("Failed to verify gamma log proof from player %" PRIu64 " block %lu, error %d", it->first, index, status);
             throw_cosigner_exception(status);
         }
+        const_cast<std::map<uint64_t, byte_vector_t>&>(it->second.response[index].gamma_proofs).clear();
         pub.gamma_commitment.clear();
         cmp_mta_message& gamma_mta = const_cast<cmp_mta_message&>(it->second.response[index].k_gamma_mta.at(my_id));
         verifiers.at(it->first)->process(data.mta_request, gamma_mta, pub.GAMMA);
@@ -176,7 +205,7 @@ cmp_mta_deltas cmp_ecdsa_signing_service::mta_verify(
     return delta;
 }
 
-void cmp_ecdsa_signing_service::calc_R(ecdsa_signing_data& data, elliptic_curve_point& R, const elliptic_curve256_algebra_ctx_t* algebra, uint64_t my_id, const std::string& uuid, const cmp_key_metadata& metadata,
+void cmp_ecdsa_signing_service::calc_R(ecdsa_preprocessing_data& data, elliptic_curve_point& R, const elliptic_curve256_algebra_ctx_t* algebra, uint64_t my_id, const std::string& uuid, const cmp_key_metadata& metadata,
         const std::map<uint64_t, std::vector<cmp_mta_deltas>>& deltas, size_t index)
 {
     elliptic_curve256_point_t DELTA;
@@ -258,6 +287,13 @@ void cmp_ecdsa_signing_service::make_sig_s_positive(cosigner_sign_algorithm algo
         throw_cosigner_exception(GFp_curve_algebra_abs((GFp_curve_algebra_ctx_t*)algebra->ctx, &sig.s, &sig.s));
         sig.v ^= (parity ^ (sig.s[31] & 1));
     }
+}
+
+size_t cmp_ecdsa_signing_service::get_min_mta_batch_size_threshold() const
+{
+    //allow derived classes to override the default threshold
+    static const size_t MIN_BATCH_SIZE = mta::batch_response_verifier::MIN_BATCH_SIZE; 
+    return MIN_BATCH_SIZE;
 }
 
 }

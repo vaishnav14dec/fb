@@ -125,7 +125,7 @@ void asymmetric_eddsa_cosigner_server::eddsa_sign_offline(const std::string& key
         }
     }
 
-    _service.start_signing(key_id, txid, data, metadata_json, players);
+    _service.on_start_signing(key_id, txid, data, metadata_json, players, platform_service::MULTI_ROUND_SIGNATURE);
     size_t blocks = data.blocks.size();
     if (blocks > MAX_BLOCKS_TO_SIGN)
     {
@@ -439,7 +439,7 @@ uint64_t asymmetric_eddsa_cosigner_server::broadcast_si(const std::string& txid,
 
     if (final_sig)
     {
-        _signing_persistency.delete_signing_data(txid);
+        _signing_persistency.delete_temporary_signing_data(txid);
 
         const std::optional<const uint64_t> diff = _timing_map.extract(txid);
         if (!diff)
@@ -537,7 +537,7 @@ uint64_t asymmetric_eddsa_cosigner_server::get_eddsa_signature(const std::string
         sigs.push_back(cur_sig);
     }
 
-    _signing_persistency.delete_signing_data(txid);
+    _signing_persistency.delete_temporary_signing_data(txid);
 
     const std::optional<const uint64_t> diff = _timing_map.extract(txid);
     if (!diff)
@@ -574,7 +574,7 @@ bool asymmetric_eddsa_cosigner_server::verify_client_s(const ed25519_point_t& R,
 void asymmetric_eddsa_cosigner_server::cancel_signing(const std::string& txid)
 {
     _signing_persistency.delete_commitments(txid);
-    _signing_persistency.delete_signing_data(txid);
+    _signing_persistency.delete_temporary_signing_data(txid);
 }
 
 void asymmetric_eddsa_cosigner_server::commit_to_Rs(const std::string& txid, uint64_t id, const std::vector<elliptic_curve_point>& Rs, eddsa_commitment& commitment)

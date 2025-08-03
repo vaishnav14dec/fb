@@ -10,33 +10,49 @@
 #include <openssl/ec.h>
 #include <openssl/objects.h>
 
-const uint8_t SECP256K1_FIELD[] = {
+const uint8_t SECP256K1_FIELD[] = 
+{
     0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xfe, 
-    0xba, 0xae, 0xdc, 0xe6, 0xaf, 0x48, 0xa0, 0x3b, 0xbf, 0xd2, 0x5e, 0x8c, 0xd0, 0x36, 0x41, 0x41};
+    0xba, 0xae, 0xdc, 0xe6, 0xaf, 0x48, 0xa0, 0x3b, 0xbf, 0xd2, 0x5e, 0x8c, 0xd0, 0x36, 0x41, 0x41
+};
 
-const uint8_t SECP256R1_FIELD[] = {
+const uint8_t SECP256R1_FIELD[] = 
+{
     0xff, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-    0xbc, 0xe6, 0xfa, 0xad, 0xa7, 0x17, 0x9e, 0x84, 0xf3, 0xb9, 0xca, 0xc2, 0xfc, 0x63, 0x25, 0x51};
+    0xbc, 0xe6, 0xfa, 0xad, 0xa7, 0x17, 0x9e, 0x84, 0xf3, 0xb9, 0xca, 0xc2, 0xfc, 0x63, 0x25, 0x51
+};
 
-const uint8_t STARK_FIELD[] = {
+const uint8_t STARK_FIELD[] = 
+{
     0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 
-    0xb7, 0x81, 0x12, 0x6d, 0xca, 0xe7, 0xb2, 0x32, 0x1e, 0x66, 0xa2, 0x41, 0xad, 0xc6, 0x4d, 0x2f};
+    0xb7, 0x81, 0x12, 0x6d, 0xca, 0xe7, 0xb2, 0x32, 0x1e, 0x66, 0xa2, 0x41, 0xad, 0xc6, 0x4d, 0x2f
+};
 
-static const uint8_t STARK_P[] = {
+static const uint8_t STARK_P[] = 
+{
     0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x11, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01};
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01
+};
 
-static const uint8_t STARK_B[] = {
+static const uint8_t STARK_B[] = 
+{
     0x06, 0xf2, 0x14, 0x13, 0xef, 0xbe, 0x40, 0xde, 0x15, 0x0e, 0x59, 0x6d, 0x72, 0xf7, 0xa8, 0xc5, 
-    0x60, 0x9a, 0xd2, 0x6c, 0x15, 0xc9, 0x15, 0xc1, 0xf4, 0xcd, 0xfc, 0xb9, 0x9c, 0xee, 0x9e, 0x89};
+    0x60, 0x9a, 0xd2, 0x6c, 0x15, 0xc9, 0x15, 0xc1, 0xf4, 0xcd, 0xfc, 0xb9, 0x9c, 0xee, 0x9e, 0x89
+};
 
-static const uint8_t STARK_GX[] = {
+static const uint8_t STARK_GX[] = 
+{
     0x01, 0xef, 0x15, 0xc1, 0x85, 0x99, 0x97, 0x1b, 0x7b, 0xec, 0xed, 0x41, 0x5a, 0x40, 0xf0, 0xc7, 
-    0xde, 0xac, 0xfd, 0x9b, 0x0d, 0x18, 0x19, 0xe0, 0x3d, 0x72, 0x3d, 0x8b, 0xc9, 0x43, 0xcf, 0xca};
-static const uint8_t STARK_GY[] = {
+    0xde, 0xac, 0xfd, 0x9b, 0x0d, 0x18, 0x19, 0xe0, 0x3d, 0x72, 0x3d, 0x8b, 0xc9, 0x43, 0xcf, 0xca
+};
+
+static const uint8_t STARK_GY[] = 
+{
     0x00, 0x56, 0x68, 0x06, 0x0a, 0xa4, 0x97, 0x30, 0xb7, 0xbe, 0x48, 0x01, 0xdf, 0x46, 0xec, 0x62, 
-    0xde, 0x53, 0xec, 0xd1, 0x1a, 0xbe, 0x43, 0xa3, 0x28, 0x73, 0x00, 0x0c, 0x36, 0xe8, 0xdc, 0x1f};
-    
+    0xde, 0x53, 0xec, 0xd1, 0x1a, 0xbe, 0x43, 0xa3, 0x28, 0x73, 0x00, 0x0c, 0x36, 0xe8, 0xdc, 0x1f
+};
+
+
 struct GFp_curve_algebra_ctx 
 {
     EC_GROUP *curve;
@@ -69,7 +85,7 @@ GFp_curve_algebra_ctx_t *secp256r1_algebra_ctx_new()
         {
             free(ctx);
             return NULL;
-        }
+        }     
     }
     return ctx;
 }
@@ -85,7 +101,7 @@ GFp_curve_algebra_ctx_t *stark_algebra_ctx_new()
     if (!algebra)
         return NULL;
     algebra->curve = NULL;
-    
+
     ctx = BN_CTX_new();
     if (!ctx)
         goto cleanup;
@@ -120,6 +136,7 @@ GFp_curve_algebra_ctx_t *stark_algebra_ctx_new()
         goto cleanup;
     if (!EC_GROUP_set_generator(algebra->curve, g, q, BN_value_one()))
         goto cleanup;
+
     ret = 1;
 
 cleanup:
@@ -1013,28 +1030,87 @@ static const struct bignum_st *order_internal(const elliptic_curve256_algebra_ct
     return NULL;
 }
 
+/**
+ * @brief Checks if a given scalar value is within the finite field of the elliptic curve.
+ *
+ * This function verifies whether the provided scalar value (`val`) is less than
+ * the field order (`field`). It performs a big-endian comparison of the two
+ * values using 32-bit segments, accounting for possible borrow propagation.
+ *
+ * The function operates as follows:
+ * - The scalar `val` and the field order `field` are treated as arrays of 32-bit words.
+ * - Each word is byte-swapped (`bswap_32`) to ensure correct big-endian ordering.
+ * - The difference between corresponding words is computed from the most significant to
+ *   the least significant, propagating a borrow bit (`borrow`) in case of underflow.
+ * - If `val` is smaller than `field`, `borrow` remains 0, meaning the value is in the field.
+ * - If `val` is greater than or equal to `field`, an underflow occurs, setting `borrow` to 1,
+ *   indicating that `val` is out of the valid range.
+ *
+ * This function ensures constant-time execution to prevent side-channel attacks.
+ *
+ * @param val   The scalar value to check, represented as a 256-bit integer.
+ * @param field The field order of the elliptic curve, also a 256-bit integer.
+ * @return      0 if `val` is within the field, 1 if `val` is out of bounds.
+ */
 static uint8_t in_field(const elliptic_curve256_scalar_t val, const uint8_t *field)
 {
-    uint64_t cc = 0;
-    const uint32_t *ptr1 = (const uint32_t*)val;
-    const uint32_t *ptr2 = (const uint32_t*)field;
-    for (size_t i = sizeof(elliptic_curve256_scalar_t) / sizeof(uint32_t); i > 0; i --)
+    uint64_t borrow = 0; // Borrow bit to track underflow
+    const uint32_t *ptr1 = (const uint32_t*)val;   // Interpret `val` as an array of 32-bit words
+    const uint32_t *ptr2 = (const uint32_t*)field; // Interpret `field` as an array of 32-bit words
+
+    // Iterate over the 32-bit segments from most significant to least significant
+    for (size_t i = sizeof(elliptic_curve256_scalar_t) / sizeof(uint32_t); i > 0; i--)
     {
-        uint64_t v1 = bswap_32(ptr1[i - 1]);
-        uint64_t v2 = bswap_32(ptr2[i - 1]);
-        cc = ((v1 - v2 - cc) >> 32) & 1;
+        uint64_t v1 = bswap_32(ptr1[i - 1]); // Convert to big-endian
+        uint64_t v2 = bswap_32(ptr2[i - 1]); // Convert to big-endian
+
+        // Compute the difference with borrow propagation
+        borrow = ((v1 - v2 - borrow) >> 32) & 0x1;
     }
-    return cc;
+
+    return borrow; // 0 if `val` is in range, 1 if `val` is out of range
 }
 
-static elliptic_curve_algebra_status ec_reduce(const struct elliptic_curve256_algebra_ctx *ctx, elliptic_curve256_scalar_t *res, const elliptic_curve256_scalar_t *val)
+// The ec_reduce function reduces a scalar 
+// (a large integer value) modulo the order of the curve. 
+// This operation ensures that the scalar lies within the valid range for scalar values used in elliptic curve operations.
+static elliptic_curve_algebra_status ec_reduce_secp256k1(const struct elliptic_curve256_algebra_ctx *ctx, elliptic_curve256_scalar_t *res, const elliptic_curve256_scalar_t *val)
 {
-    if (!ctx || !res || !val || (ctx->type != ELLIPTIC_CURVE_SECP256K1 && ctx->type != ELLIPTIC_CURVE_SECP256R1))
+    if (!ctx || !res || !val || ctx->type != ELLIPTIC_CURVE_SECP256K1)
+    {
         return ELLIPTIC_CURVE_ALGEBRA_INVALID_PARAMETER;
-    if (!in_field(*val, ctx->type == ELLIPTIC_CURVE_SECP256K1 ? SECP256K1_FIELD : SECP256R1_FIELD))
+    }
+        
+    if (!in_field(*val, SECP256K1_FIELD))
+    {
         return ELLIPTIC_CURVE_ALGEBRA_INVALID_SCALAR;
+    }
+        
     if (res != val)
+    {
         memcpy(*res, *val, sizeof(elliptic_curve256_scalar_t));
+    }
+        
+    return ELLIPTIC_CURVE_ALGEBRA_SUCCESS;
+}
+
+static elliptic_curve_algebra_status ec_reduce_secp256r1(const struct elliptic_curve256_algebra_ctx *ctx, elliptic_curve256_scalar_t *res, const elliptic_curve256_scalar_t *val)
+{
+    if (!ctx || !res || !val || ctx->type != ELLIPTIC_CURVE_SECP256R1)
+    {
+        return ELLIPTIC_CURVE_ALGEBRA_INVALID_PARAMETER;
+    }
+        
+    if (!in_field(*val, SECP256R1_FIELD))
+    {
+        return ELLIPTIC_CURVE_ALGEBRA_INVALID_SCALAR;
+    }
+        
+    if (res != val)
+    {
+        memcpy(*res, *val, sizeof(elliptic_curve256_scalar_t));
+    }
+        
     return ELLIPTIC_CURVE_ALGEBRA_SUCCESS;
 }
 
@@ -1043,7 +1119,10 @@ static elliptic_curve_algebra_status ec_reduce_stark(const struct elliptic_curve
     elliptic_curve_algebra_status ret;
     elliptic_curve256_scalar_t tmp;
     if (!ctx || !res || !val || ctx->type != ELLIPTIC_CURVE_STARK)
+    {
         return ELLIPTIC_CURVE_ALGEBRA_INVALID_PARAMETER;
+    }
+        
     memcpy(tmp, *val, sizeof(elliptic_curve256_scalar_t));
     tmp[0] &= 0x0f; // stack curve order is 252 bit
     if (in_field(tmp, STARK_FIELD))
@@ -1052,9 +1131,141 @@ static elliptic_curve_algebra_status ec_reduce_stark(const struct elliptic_curve
         ret = ELLIPTIC_CURVE_ALGEBRA_SUCCESS;
     }
     else
+    {
         ret = ELLIPTIC_CURVE_ALGEBRA_INVALID_SCALAR;
+    }
+        
     OPENSSL_cleanse(tmp, sizeof(elliptic_curve256_scalar_t));
     return ret;
+}
+/**
+ * @brief Maps a message to a valid elliptic curve point using a simple hash function.
+ *
+ * This function attempts to find a valid point on the elliptic curve by hashing the input message
+ * and interpreting the resulting hash as a candidate x-coordinate. The function performs the following steps:
+ *
+ * 1. Computes a SHA-512 hash of the input message.
+ * 2. Interprets the hash as a potential x-coordinate and reduces it modulo the field size of the curve.
+ * 3. Tries to construct an elliptic curve point using the x-coordinate with the compressed encoding format.
+ * 4. If the candidate x-coordinate does not produce a valid point, re-hashes the previous hash and repeats.
+ * 5. If a valid point is found within a maximum number of iterations (`max_retries`), it is returned.
+ * 6. If no valid point is found, the function returns an error.
+ *
+ * @param algebra  The elliptic curve algebra context.
+ * @param res      The output buffer to store the computed elliptic curve point.
+ * @param msg      The input message to be hashed and mapped to the curve.
+ * @param msg_len  The length of the input message.
+ * @return         `ELLIPTIC_CURVE_ALGEBRA_SUCCESS` if a valid point is found,
+ *                 `ELLIPTIC_CURVE_ALGEBRA_INVALID_POINT` if no valid point is found within the retry limit,
+ *                 or `ELLIPTIC_CURVE_ALGEBRA_INVALID_PARAMETER` if inputs are null.
+ */
+static elliptic_curve_algebra_status simple_hash_to_curve(const struct elliptic_curve256_algebra_ctx *algebra,
+                                                          elliptic_curve256_point_t *res,
+                                                          const uint8_t *msg,
+                                                          uint32_t msg_len)
+{
+    uint8_t hash[SHA512_DIGEST_LENGTH];  // Buffer to store the SHA-512 hash
+    elliptic_curve256_point_t point;     // Buffer to hold candidate points
+    BN_CTX *ctx = NULL;                  // OpenSSL big number context
+    uint32_t max_retries = 1024;         // Maximum number of attempts to find a valid point
+    SHA512_CTX hash_ctx;                 // SHA-512 context
+    EC_POINT *ec_point = NULL;           // Temporary OpenSSL EC_POINT
+    BIGNUM *tmp, *field_size;            // Temporary big numbers for calculations
+    elliptic_curve_algebra_status status = ELLIPTIC_CURVE_ALGEBRA_INVALID_POINT;
+
+    // Validate input parameters
+    if (!algebra || !res || (msg_len && !msg))
+    {
+        return ELLIPTIC_CURVE_ALGEBRA_INVALID_PARAMETER;
+    }
+    
+    if (!algebra->ctx) 
+    {
+        return ELLIPTIC_CURVE_ALGEBRA_INVALID_PARAMETER;
+    } 
+
+    // Initialize result buffer
+    OPENSSL_cleanse(*res, sizeof(elliptic_curve256_point_t));
+
+    // Create a new OpenSSL big number context
+    ctx = BN_CTX_new();
+    if (!ctx)
+    {
+        status = ELLIPTIC_CURVE_ALGEBRA_OUT_OF_MEMORY;
+        goto cleanup;
+    }
+    
+    BN_CTX_start(ctx);
+
+    // Allocate temporary big numbers
+    tmp = BN_CTX_get(ctx);
+    field_size = BN_CTX_get(ctx);
+    if (!tmp || !field_size)
+    {
+        status = ELLIPTIC_CURVE_ALGEBRA_OUT_OF_MEMORY;
+        goto cleanup;
+    }
+    
+    // Create a new EC_POINT structure for the curve
+    ec_point = EC_POINT_new(((GFp_curve_algebra_ctx_t*) algebra->ctx)->curve);
+    if (!ec_point)
+    {
+        status = ELLIPTIC_CURVE_ALGEBRA_OUT_OF_MEMORY;
+        goto cleanup;
+    }
+
+    // Get the field size of the elliptic curve
+    if (!EC_GROUP_get_curve_GFp(((GFp_curve_algebra_ctx_t*) algebra->ctx)->curve, field_size, NULL, NULL, ctx))
+    {
+        status = ELLIPTIC_CURVE_ALGEBRA_UNKNOWN_ERROR;
+        goto cleanup;
+    }
+
+    // Compute initial SHA-512 hash of the input message
+    SHA512_Init(&hash_ctx);
+    SHA512_Update(&hash_ctx, msg, msg_len);
+    SHA512_Final(hash, &hash_ctx);
+
+    while (0 != --max_retries)
+    {
+        // Convert hash to a big number and reduce modulo the field size
+        if (!BN_bin2bn(hash, sizeof(hash), tmp) || 
+            !BN_mod(tmp, tmp, field_size, ctx) ||
+            !BN_bn2binpad(tmp, point + 1, sizeof(point) - 1))
+        {
+            goto cleanup;
+        }
+
+        // Assign compressed encoding byte: 0x2 for even y, 0x3 for odd y
+        point[0] = (hash[sizeof(hash) - 1] & 0x80) ? 0x2 : 0x3;
+        
+        // Check if the generated point is a valid curve point
+        if (EC_POINT_oct2point(((GFp_curve_algebra_ctx_t*) algebra->ctx)->curve, ec_point, point, sizeof(point), ctx))
+        {
+            status = ELLIPTIC_CURVE_ALGEBRA_SUCCESS;
+            memcpy(*res, point, sizeof(point));
+            break;
+        }
+
+        // If invalid, re-hash and try again
+        SHA512_Init(&hash_ctx);
+        SHA512_Update(&hash_ctx, hash, sizeof(hash));
+        SHA512_Final(hash, &hash_ctx);
+    }
+
+cleanup:
+    // Free allocated memory
+    if (ec_point)
+    {
+        EC_POINT_free(ec_point);
+    }
+    if (ctx)
+    {
+        BN_CTX_end(ctx);
+        BN_CTX_free(ctx);
+    }
+
+    return status;
 }
 
 elliptic_curve256_algebra_ctx_t* elliptic_curve256_new_secp256k1_algebra()
@@ -1080,8 +1291,9 @@ elliptic_curve256_algebra_ctx_t* elliptic_curve256_new_secp256k1_algebra()
     ctx->mul_scalars = mul_scalars;
     ctx->inverse = inverse;
     ctx->rand = ec_rand;
-    ctx->reduce = ec_reduce;
     ctx->order_internal = order_internal;
+    ctx->reduce = ec_reduce_secp256k1;
+    ctx->hash_on_curve = simple_hash_to_curve;
     return ctx;
 }
 
@@ -1108,8 +1320,9 @@ elliptic_curve256_algebra_ctx_t* elliptic_curve256_new_secp256r1_algebra()
     ctx->mul_scalars = mul_scalars;
     ctx->inverse = inverse;
     ctx->rand = ec_rand;
-    ctx->reduce = ec_reduce;
     ctx->order_internal = order_internal;
+    ctx->reduce = ec_reduce_secp256r1;
+    ctx->hash_on_curve = simple_hash_to_curve;
     return ctx;
 }
 
@@ -1136,7 +1349,8 @@ elliptic_curve256_algebra_ctx_t* elliptic_curve256_new_stark_algebra()
     ctx->mul_scalars = mul_scalars;
     ctx->inverse = inverse;
     ctx->rand = ec_rand;
-    ctx->reduce = ec_reduce_stark;
     ctx->order_internal = order_internal;
+    ctx->reduce = ec_reduce_stark;
+    ctx->hash_on_curve = simple_hash_to_curve;
     return ctx;
 }

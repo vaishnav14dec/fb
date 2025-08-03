@@ -4,7 +4,6 @@
 #include <openssl/bn.h>
 #include <openssl/sha.h>
 
-
 static zero_knowledge_proof_status from_elliptic_curve_algebra_status(elliptic_curve_algebra_status status)
 {
     switch (status)

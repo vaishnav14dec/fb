@@ -6,8 +6,10 @@
 
 #include <tests/catch.hpp>
 
-TEST_CASE( "gen_key", "paillier") {
-    SECTION("gen_key") {
+TEST_CASE( "gen_key", "paillier") 
+{
+    SECTION("gen_key") 
+    {
         paillier_public_key_t* pub;
         paillier_private_key_t* priv;
         long res = paillier_generate_key_pair(4096, &pub, &priv);
@@ -34,14 +36,16 @@ TEST_CASE( "gen_key", "paillier") {
     //     paillier_free_private_key(priv);
     // }
 
-    SECTION("too small key") {
+    SECTION("too small key") 
+    {
         paillier_public_key_t* pub = NULL;
         paillier_private_key_t* priv = NULL;
         long res = paillier_generate_key_pair(64, &pub, &priv);
         REQUIRE(res == PAILLIER_ERROR_KEYLEN_TOO_SHORT);
     }
 
-    SECTION("strange key") {
+    SECTION("strange key") 
+    {
         paillier_public_key_t* pub;
         paillier_private_key_t* priv;
         long res = paillier_generate_key_pair(5099, &pub, &priv);
@@ -50,7 +54,8 @@ TEST_CASE( "gen_key", "paillier") {
         paillier_free_private_key(priv);
     }
 
-    SECTION("invalid") {
+    SECTION("invalid") 
+    {
         paillier_public_key_t* pub;
         paillier_private_key_t* priv;
         long res = paillier_generate_key_pair(5099, NULL, &priv);
@@ -61,12 +66,14 @@ TEST_CASE( "gen_key", "paillier") {
 }
 
 
-TEST_CASE( "basic", "paillier") {
+TEST_CASE( "basic", "paillier") 
+{
     paillier_public_key_t* pub;
     paillier_private_key_t* priv;
     long res = paillier_generate_key_pair(2048, &pub, &priv);
     
-    SECTION("enc") {
+    SECTION("enc") 
+    {
         uint8_t* data = NULL;
         uint32_t data_len = 0;
         char* text = NULL;
@@ -90,7 +97,8 @@ TEST_CASE( "basic", "paillier") {
         delete[] text;
     }
 
-    SECTION("enc int") {
+    SECTION("enc int") 
+    {
         REQUIRE(res == PAILLIER_SUCCESS);
         uint64_t msg = 1234567;
         uint32_t len = 0;
@@ -129,13 +137,15 @@ TEST_CASE( "basic", "paillier") {
     paillier_free_private_key(priv);
 }
 
-TEST_CASE( "serialize pub", "paillier") {
+TEST_CASE( "serialize pub", "paillier") 
+{
     paillier_public_key_t* pub = NULL;
     paillier_public_key_t* local_pub = NULL;
     paillier_private_key_t* priv = NULL;
     long res = paillier_generate_key_pair(2048, &pub, &priv);
     
-    SECTION("enc") {
+    SECTION("enc") 
+    {
         uint8_t* data = NULL;
         uint32_t data_len = 0;
         char* text = NULL;
@@ -166,7 +176,8 @@ TEST_CASE( "serialize pub", "paillier") {
         delete[] text;
     }
 
-    SECTION("invalid buffer") {
+    SECTION("invalid buffer") 
+    {
         uint8_t* data = NULL;
         uint32_t data_len = 0;
         REQUIRE(res == PAILLIER_SUCCESS);
@@ -185,13 +196,15 @@ TEST_CASE( "serialize pub", "paillier") {
     paillier_free_private_key(priv);
 }
 
-TEST_CASE( "serialize priv", "paillier") {
+TEST_CASE( "serialize priv", "paillier") 
+{
     paillier_public_key_t* pub = NULL;
     paillier_private_key_t* priv = NULL;
     paillier_private_key_t* local_priv = NULL;
     long res = paillier_generate_key_pair(2048, &pub, &priv);
     
-    SECTION("enc") {
+    SECTION("enc") 
+    {
         uint8_t* data = NULL;
         uint32_t data_len = 0;
         char* text = NULL;
@@ -222,7 +235,8 @@ TEST_CASE( "serialize priv", "paillier") {
         delete[] text;
     }
 
-    SECTION("invalid buffer") {
+    SECTION("invalid buffer") 
+    {
         uint8_t* data = NULL;
         uint32_t data_len = 0;
         REQUIRE(res == PAILLIER_SUCCESS);
@@ -241,12 +255,14 @@ TEST_CASE( "serialize priv", "paillier") {
     paillier_free_private_key(local_priv);
 }
 
-TEST_CASE( "add", "paillier") {
+TEST_CASE( "add", "paillier") 
+{
     paillier_public_key_t* pub;
     paillier_private_key_t* priv;
     long res = paillier_generate_key_pair(2048, &pub, &priv);
 
-    SECTION("add") {
+    SECTION("add") 
+    {
         REQUIRE(res == PAILLIER_SUCCESS);
         uint8_t msg[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 12, 13, 14, 15, 16, 17, 18};
         uint32_t len = 0;
@@ -285,7 +301,8 @@ TEST_CASE( "add", "paillier") {
         delete[] decrypted;
     }
 
-    SECTION("add int") {
+    SECTION("add int") 
+    {
         REQUIRE(res == PAILLIER_SUCCESS);
         uint64_t msg = 1234567;
         uint32_t len = 0;
@@ -320,7 +337,8 @@ TEST_CASE( "add", "paillier") {
         delete[] data3;
     }
 
-    SECTION("add int") {
+    SECTION("add int") 
+    {
         REQUIRE(res == PAILLIER_SUCCESS);
         uint64_t msg = 1234567;
         uint32_t len = 0;
@@ -352,12 +370,14 @@ TEST_CASE( "add", "paillier") {
     paillier_free_private_key(priv);
 }
 
-TEST_CASE( "sub", "paillier") {
+TEST_CASE( "sub", "paillier") 
+{
     paillier_public_key_t* pub;
     paillier_private_key_t* priv;
     long res = paillier_generate_key_pair(2048, &pub, &priv);
     
-    SECTION("sub") {
+    SECTION("sub") 
+    {
         REQUIRE(res == PAILLIER_SUCCESS);
         uint8_t msg[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 12, 13, 14, 15, 16, 17, 18};
         uint32_t len = 0;
@@ -395,7 +415,9 @@ TEST_CASE( "sub", "paillier") {
         uint8_t sub_bin[sizeof(msg)];
         BN_bn2bin(m1, sub_bin);
         for (uint32_t i = 0; i < decrypted_len; i++)
+        {
             REQUIRE(decrypted[i] == sub_bin[i]);
+        }
         BN_free(m1);
         BN_free(m2);
         delete[] data;
@@ -404,7 +426,8 @@ TEST_CASE( "sub", "paillier") {
         delete[] decrypted;
     }
 
-    SECTION("sub int") {
+    SECTION("sub int") 
+    {
         REQUIRE(res == PAILLIER_SUCCESS);
         uint64_t msg = 7654321;
         uint32_t len = 0;
@@ -439,7 +462,8 @@ TEST_CASE( "sub", "paillier") {
         delete[] data3;
     }
 
-    SECTION("sub int") {
+    SECTION("sub int") 
+    {
         REQUIRE(res == PAILLIER_SUCCESS);
         uint64_t msg = 7654321;
         uint32_t len = 0;
@@ -471,12 +495,14 @@ TEST_CASE( "sub", "paillier") {
     paillier_free_private_key(priv);
 }
 
-TEST_CASE( "mul", "paillier") {
+TEST_CASE( "mul", "paillier") 
+{
     paillier_public_key_t* pub;
     paillier_private_key_t* priv;
     long res = paillier_generate_key_pair(2048, &pub, &priv);
     
-    SECTION("mul") {
+    SECTION("mul") 
+    {
         REQUIRE(res == PAILLIER_SUCCESS);
         uint8_t msg[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 12, 13, 14, 15, 16, 17, 18};
         uint32_t len = 0;
@@ -508,7 +534,9 @@ TEST_CASE( "mul", "paillier") {
         uint8_t* mul_bin = new uint8_t[BN_num_bytes(m1)];
         BN_bn2bin(m1, mul_bin);
         for (uint32_t i = 0; i < decrypted_len; i++)
+        {
             REQUIRE(decrypted[i] == mul_bin[i]);
+        }
         BN_free(m1);
         delete[] mul_bin;
         delete[] data;
@@ -516,7 +544,8 @@ TEST_CASE( "mul", "paillier") {
         delete[] decrypted;
     }
 
-    SECTION("mul int") {
+    SECTION("mul int") 
+    {
         REQUIRE(res == PAILLIER_SUCCESS);
         uint64_t msg = 1234567;
         uint32_t len = 0;
@@ -548,13 +577,15 @@ TEST_CASE( "mul", "paillier") {
     paillier_free_private_key(priv);
 }
 
-TEST_CASE( "zkpok", "paillier") {
+TEST_CASE( "zkpok", "paillier") 
+{
     paillier_public_key_t* pub;
     paillier_private_key_t* priv;
     long res = paillier_generate_key_pair(2048, &pub, &priv);
-    
-    SECTION("valid") {
-        REQUIRE(res == PAILLIER_SUCCESS);
+    REQUIRE(res == PAILLIER_SUCCESS);
+
+    SECTION("valid") 
+    {
         unsigned char x[PAILLIER_SHA256_LEN];
         unsigned char y[256];
         
@@ -564,8 +595,8 @@ TEST_CASE( "zkpok", "paillier") {
         REQUIRE(res == PAILLIER_SUCCESS);
     }
 
-    SECTION("invalid aad") {
-        REQUIRE(res == PAILLIER_SUCCESS);
+    SECTION("invalid aad") 
+    {
         unsigned char x[PAILLIER_SHA256_LEN];
         unsigned char y[256];
         
@@ -575,8 +606,8 @@ TEST_CASE( "zkpok", "paillier") {
         REQUIRE(res == PAILLIER_ERROR_INVALID_PROOF);
     }
     
-    SECTION("invalid x") {
-        REQUIRE(res == PAILLIER_SUCCESS);
+    SECTION("invalid x") 
+    {
         unsigned char x[PAILLIER_SHA256_LEN];
         unsigned char y[256];
         
@@ -587,8 +618,8 @@ TEST_CASE( "zkpok", "paillier") {
         REQUIRE(res == PAILLIER_ERROR_INVALID_PROOF);
     }
 
-    SECTION("invalid y") {
-        REQUIRE(res == PAILLIER_SUCCESS);
+    SECTION("invalid y") 
+    {
         unsigned char x[PAILLIER_SHA256_LEN];
         unsigned char y[256];
         
@@ -599,7 +630,8 @@ TEST_CASE( "zkpok", "paillier") {
         REQUIRE(res == PAILLIER_ERROR_INVALID_PROOF);
     }
 
-    SECTION("invalid param") {
+    SECTION("invalid param") 
+    {
         unsigned char x[PAILLIER_SHA256_LEN];
         unsigned char y[256];
         res = paillier_generate_factorization_zkpok(NULL, (const unsigned char*)"hello world", sizeof("hello world") - 1, x, y, 256, NULL);
@@ -629,13 +661,15 @@ TEST_CASE( "zkpok", "paillier") {
     paillier_free_private_key(priv);
 }
 
-TEST_CASE( "zkp", "paillier") {
+TEST_CASE( "zkp", "paillier") 
+{
     paillier_public_key_t* pub;
     paillier_private_key_t* priv;
     long res = paillier_generate_key_pair(2048, &pub, &priv);
-    
-    SECTION("valid") {
-        REQUIRE(res == PAILLIER_SUCCESS);
+    REQUIRE(res == PAILLIER_SUCCESS);
+
+    SECTION("valid") 
+    {
         unsigned char y[4096];
         
         res = paillier_generate_coprime_zkp(priv, (const unsigned char*)"hello world", sizeof("hello world") - 1, y, sizeof(y), NULL);
@@ -644,8 +678,8 @@ TEST_CASE( "zkp", "paillier") {
         REQUIRE(res == PAILLIER_SUCCESS);
     }
 
-    SECTION("invalid aad") {
-        REQUIRE(res == PAILLIER_SUCCESS);
+    SECTION("invalid aad") 
+    {
         unsigned char y[4096];
         
         res = paillier_generate_coprime_zkp(priv, (const unsigned char*)"hello world", sizeof("hello world") - 1, y, sizeof(y), NULL);
@@ -654,8 +688,8 @@ TEST_CASE( "zkp", "paillier") {
         REQUIRE(res == PAILLIER_ERROR_INVALID_PROOF);
     }
     
-    SECTION("invalid y") {
-        REQUIRE(res == PAILLIER_SUCCESS);
+    SECTION("invalid y") 
+    {
         unsigned char y[4096];
         
         res = paillier_generate_coprime_zkp(priv, (const unsigned char*)"hello world", sizeof("hello world") - 1, y, sizeof(y), NULL);
@@ -665,7 +699,8 @@ TEST_CASE( "zkp", "paillier") {
         REQUIRE(res == PAILLIER_ERROR_INVALID_PROOF);
     }
 
-    SECTION("invalid param") {
+    SECTION("invalid param") 
+    {
         unsigned char y[4096];
         unsigned int y_len;
         res = paillier_generate_coprime_zkp(NULL, (const unsigned char*)"hello world", sizeof("hello world") - 1, y, 4096, NULL);
@@ -692,13 +727,15 @@ TEST_CASE( "zkp", "paillier") {
     paillier_free_private_key(priv);
 }
 
-TEST_CASE( "paillier_blum_zkp", "paillier") {
+TEST_CASE( "paillier_blum_zkp", "paillier") 
+{
     paillier_public_key_t* pub;
     paillier_private_key_t* priv;
     long res = paillier_generate_key_pair(2048, &pub, &priv);
-    
-    SECTION("valid") {
-        REQUIRE(res == PAILLIER_SUCCESS);
+    REQUIRE(res == PAILLIER_SUCCESS);
+
+    SECTION("valid") 
+    {    
         uint32_t proof_len;
         res = paillier_generate_paillier_blum_zkp(priv, (const unsigned char*)"hello world", sizeof("hello world") - 1, NULL, 0, &proof_len);
         REQUIRE(res == PAILLIER_ERROR_BUFFER_TOO_SHORT);
@@ -711,8 +748,8 @@ TEST_CASE( "paillier_blum_zkp", "paillier") {
         REQUIRE(res == PAILLIER_SUCCESS);
     }
 
-    SECTION("invalid aad") {
-        REQUIRE(res == PAILLIER_SUCCESS);
+    SECTION("invalid aad") 
+    {
         uint32_t proof_len;
         res = paillier_generate_paillier_blum_zkp(priv, (const unsigned char*)"hello world", sizeof("hello world") - 1, NULL, 0, &proof_len);
         REQUIRE(res == PAILLIER_ERROR_BUFFER_TOO_SHORT);
@@ -723,8 +760,8 @@ TEST_CASE( "paillier_blum_zkp", "paillier") {
         REQUIRE(res == PAILLIER_ERROR_INVALID_PROOF);
     }
     
-    SECTION("invalid proof") {
-        REQUIRE(res == PAILLIER_SUCCESS);
+    SECTION("invalid proof") 
+    {
         uint32_t proof_len;
         res = paillier_generate_paillier_blum_zkp(priv, (const unsigned char*)"hello world", sizeof("hello world") - 1, NULL, 0, &proof_len);
         REQUIRE(res == PAILLIER_ERROR_BUFFER_TOO_SHORT);
@@ -740,7 +777,8 @@ TEST_CASE( "paillier_blum_zkp", "paillier") {
         REQUIRE(res == PAILLIER_ERROR_INVALID_PROOF);
     }
 
-    SECTION("invalid param") {
+    SECTION("invalid param") 
+    {
         uint32_t proof_len;
         res = paillier_generate_paillier_blum_zkp(priv, (const unsigned char*)"hello world", sizeof("hello world") - 1, NULL, 0, &proof_len);
         REQUIRE(res == PAILLIER_ERROR_BUFFER_TOO_SHORT);
@@ -767,3 +805,5 @@ TEST_CASE( "paillier_blum_zkp", "paillier") {
     paillier_free_public_key(pub);
     paillier_free_private_key(priv);
 }
+
+

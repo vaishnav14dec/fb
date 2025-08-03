@@ -59,6 +59,13 @@ TEST_CASE("schnorr", "verify") {
         REQUIRE(drng_read_deterministic_rand(rng, NULL, 1) == DRNG_INVALID_PARAMETER);
         REQUIRE(drng_read_deterministic_rand(rng, buff, 0) == DRNG_INVALID_PARAMETER);
         REQUIRE(drng_read_deterministic_rand(NULL, buff, 16) == DRNG_INVALID_PARAMETER);
+
+        REQUIRE(drng_read_deterministic_rand(rng, (uint8_t*)rng, 16) == DRNG_INVALID_PARAMETER);
+        REQUIRE(drng_read_deterministic_rand(rng, ((uint8_t*)rng) + 10, 16) == DRNG_INVALID_PARAMETER);
+        REQUIRE(drng_read_deterministic_rand(rng, ((uint8_t*)rng) + 64, 16) == DRNG_INVALID_PARAMETER);
+        REQUIRE(drng_read_deterministic_rand(rng, ((uint8_t*)rng) - 10, 16) == DRNG_INVALID_PARAMETER);
+        REQUIRE(drng_read_deterministic_rand(rng, ((uint8_t*)rng) - 256, 65536) == DRNG_INVALID_PARAMETER);
+
         drng_free(rng);
     }
 }

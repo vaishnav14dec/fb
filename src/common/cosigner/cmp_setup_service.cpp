@@ -523,19 +523,33 @@ auxiliary_keys cmp_setup_service::create_auxiliary_keys()
 
 void cmp_setup_service::serialize_auxiliary_keys(const auxiliary_keys& aux, std::vector<uint8_t>& paillier_public_key, std::vector<uint8_t>& ring_pedersen_public_key)
 {
-    uint32_t size;
-    paillier_public_key_serialize(paillier_private_key_get_public(aux.paillier.get()), NULL, 0, &size);
+    const paillier_public_key_t* paillier_public = paillier_private_key_get_public(aux.paillier.get()); 
+    const ring_pedersen_public_t* ring_pedersen_public = ring_pedersen_private_key_get_public(aux.ring_pedersen.get());
+
+    if (paillier_public == NULL)
+    {
+        LOG_ERROR("Could not serialize NULL paillier public key");
+        throw cosigner_exception(cosigner_exception::INTERNAL_ERROR);
+    }
+    if (ring_pedersen_public == NULL)
+    {
+        LOG_ERROR("Could not serialize NULL ring pedersen public key");
+        throw cosigner_exception(cosigner_exception::INTERNAL_ERROR);
+    }
+
+    uint32_t size = 0U;
+    paillier_public_key_serialize(paillier_public, NULL, 0, &size);
     paillier_public_key.resize(size);
-    if (!paillier_public_key_serialize(paillier_private_key_get_public(aux.paillier.get()), paillier_public_key.data(), size, &size))
+    if (!paillier_public_key_serialize(paillier_public, paillier_public_key.data(), size, &size))
     {
         LOG_ERROR("failed to serialize paillier public key");
         throw cosigner_exception(cosigner_exception::INTERNAL_ERROR);
     }
     
     size = 0;
-    ring_pedersen_public_serialize(ring_pedersen_private_key_get_public(aux.ring_pedersen.get()), NULL, 0, &size);
+    ring_pedersen_public_serialize(ring_pedersen_public, NULL, 0, &size);
     ring_pedersen_public_key.resize(size);
-    if (!ring_pedersen_public_serialize(ring_pedersen_private_key_get_public(aux.ring_pedersen.get()), ring_pedersen_public_key.data(), size, &size))
+    if (!ring_pedersen_public_serialize(ring_pedersen_public, ring_pedersen_public_key.data(), size, &size))
     {
         LOG_ERROR("failed to serialize ring pedersen public key");
         throw cosigner_exception(cosigner_exception::INTERNAL_ERROR);

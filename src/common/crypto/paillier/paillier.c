@@ -1,60 +1,28 @@
 #include "paillier_internal.h"
+#include "crypto/zero_knowledge_proof/range_proofs.h"
+#include "../algebra_utils/status_convert.h"
+#include "../algebra_utils/algebra_utils.h"
+#include "../zero_knowledge_proof/zkp_constants_internal.h"
 
 #include <string.h>
 #include <assert.h>
 
 #include <openssl/err.h>
 
-// WARNING: this function doesn't run in constant time!
-int is_coprime_fast(const BIGNUM *in_a, const BIGNUM *in_b, BN_CTX *ctx)
-{
-    BIGNUM *a, *b;
-    int ret = -1;
+#define MIN_KEY_LEN_IN_BITS 256
 
-    BN_CTX_start(ctx);
-    a = BN_CTX_get(ctx);
-    b = BN_CTX_get(ctx);
 
-    if (!a || !BN_copy(a, in_a))
-    {
-        goto cleanup;
-    }
-
-    if (!b || !BN_copy(b, in_b))
-    {
-        goto cleanup;
-    }
-
-    if (BN_cmp(a, b) < 0)
-    {
-        BIGNUM *t = b;
-        b = a;
-        a = t;
-    }
-
-    while (!BN_is_zero(b))
-    {
-        BIGNUM *t;
-        if (!BN_mod(a, a, b, ctx))
-        {
-            goto cleanup;
-        }
-        t = b;
-        b = a;
-        a = t;
-    }
-    ret = BN_is_one(a);
-
-cleanup:
-    BN_CTX_end(ctx);
-    return ret;
-}
-
-static uint64_t L(BIGNUM *res, const BIGNUM *x, const BIGNUM *n, BN_CTX *ctx)
+uint64_t paillier_L(BIGNUM *res, const BIGNUM *x, const BIGNUM *n, BN_CTX *ctx)
 {
     uint64_t ret = -1;
 
     BIGNUM *x_copy = BN_dup(x);
+    
+    if (!x_copy)
+    {
+        ret = PAILLIER_ERROR_OUT_OF_MEMORY;
+        goto cleanup;
+    }
 
     if (!BN_sub_word(x_copy, 1))
     {
@@ -77,7 +45,7 @@ cleanup:
     return ret;
 }
 
-long paillier_generate_key_pair(uint32_t key_len, paillier_public_key_t **pub, paillier_private_key_t **priv)
+static long paillier_generate_private(uint32_t key_len, paillier_private_key_t *priv)
 {
     long ret = -1;
     BIGNUM *p = NULL, *q = NULL;
@@ -85,10 +53,8 @@ long paillier_generate_key_pair(uint32_t key_len, paillier_public_key_t **pub, p
     BIGNUM *lamda = NULL,  *mu = NULL;
     BIGNUM *three = NULL, *seven = NULL, *eight = NULL;
     BN_CTX *ctx = NULL;
-    paillier_public_key_t *local_pub = NULL;
-    paillier_private_key_t *local_priv = NULL;
-
-    if (!pub || !priv)
+    
+    if (!priv)
     {
         return PAILLIER_ERROR_INVALID_PARAM;
     }
@@ -96,9 +62,6 @@ long paillier_generate_key_pair(uint32_t key_len, paillier_public_key_t **pub, p
     {
         return PAILLIER_ERROR_KEYLEN_TOO_SHORT;
     }
-
-    *pub = NULL;
-    *priv = NULL;
 
     ctx = BN_CTX_secure_new();
     if (!ctx)
@@ -156,7 +119,7 @@ long paillier_generate_key_pair(uint32_t key_len, paillier_public_key_t **pub, p
         // p needs to be in the form of p = 8 * k + 3 ( p = 3 mod 8) to allow efficient calculation off fourth roots 
         // (needed in paillier blum zkp)
         if (!BN_generate_prime_ex(p, key_len / 2, 0, eight, three, NULL))
-    {
+        {
             goto cleanup;
         }
 
@@ -190,14 +153,14 @@ long paillier_generate_key_pair(uint32_t key_len, paillier_public_key_t **pub, p
         if (!BN_add_word(lamda, 1))
         {
             goto cleanup;
-    }
+        }
     } while (BN_cmp(p, q) == 0 || 
              !BN_gcd(tmp, lamda, n, ctx) || 
              !BN_is_one(tmp));
 
     if (!BN_sqr(n2, n, ctx))
     {
-            goto cleanup;
+        goto cleanup;
     }
 
     // if num_bits(q) == num_bits(p), we can optimize g lambda and mu selection see https://en.wikipedia.org/wiki/Paillier_cryptosystem
@@ -206,39 +169,15 @@ long paillier_generate_key_pair(uint32_t key_len, paillier_public_key_t **pub, p
         goto cleanup;
     }
 
-    local_priv = (paillier_private_key_t*)malloc(sizeof(paillier_private_key_t));
-    if (!local_priv)
-    {
-        ret = PAILLIER_ERROR_OUT_OF_MEMORY;
-        goto cleanup;
-    }
-    local_priv->pub.n = n;
-    local_priv->pub.n2 = n2;
-    local_priv->p = p;
-    local_priv->q = q;
-    local_priv->lamda = lamda;
-    local_priv->mu = mu;
-    
-    local_pub = (paillier_public_key_t*)malloc(sizeof(paillier_public_key_t));
-    if (!local_pub)
-    {
-        ret = PAILLIER_ERROR_OUT_OF_MEMORY;
-        goto cleanup;
-    }
-
-    local_pub->n = BN_dup(n);
-    local_pub->n2 = BN_dup(n2);
-
-    if (!local_pub->n || !local_pub->n2)
-    {
-        ret = PAILLIER_ERROR_OUT_OF_MEMORY;
-        goto cleanup;
-    }
-
-    *priv = local_priv;
-    *pub = local_pub;
+    priv->pub.n = n;
+    priv->pub.n2 = n2;
+    priv->p = p;
+    priv->q = q;
+    priv->lamda = lamda;
+    priv->mu = mu;
 
     ret = PAILLIER_SUCCESS;
+
 cleanup:
     if (-1 == ret)
     {
@@ -254,17 +193,70 @@ cleanup:
     if (ret)
     {
         // handle errors
-        if (local_priv)
-        {
-            free(local_priv);
-        }
-        paillier_free_public_key(local_pub); // as the public key uses duplication of n and n2 it's not sefficent just to free it
         BN_free(p);
         BN_free(q);
         BN_free(n);
         BN_free(n2);
         BN_free(lamda);
         BN_free(mu);
+    }
+
+    return ret;
+
+}
+
+long paillier_generate_key_pair(uint32_t key_len, paillier_public_key_t **pub, paillier_private_key_t **priv)
+{
+    long ret = -1;
+    paillier_private_key_t *local_priv = NULL;
+    paillier_public_key_t *local_pub = NULL;
+    if (!pub || !priv)
+    {
+        return PAILLIER_ERROR_INVALID_PARAM;
+    }
+    
+    (*priv) = NULL;
+    (*pub) = NULL;
+
+    if (key_len < MIN_KEY_LEN_IN_BITS)
+    {
+        return PAILLIER_ERROR_KEYLEN_TOO_SHORT;
+    }
+    
+    local_priv = (paillier_private_key_t*)calloc(1, sizeof(paillier_private_key_t));
+    local_pub = (paillier_public_key_t*)calloc(1, sizeof(paillier_public_key_t));
+    if (!local_priv || !local_pub)
+    {
+        ret = PAILLIER_ERROR_OUT_OF_MEMORY;
+        goto cleanup;
+    }
+
+    ret = paillier_generate_private(key_len, local_priv);
+    if (ret != PAILLIER_SUCCESS)
+    {
+        goto cleanup;
+    }
+    
+    local_pub->n = BN_dup(local_priv->pub.n);
+    local_pub->n2 = BN_dup(local_priv->pub.n2);
+
+    if (!local_pub->n || !local_pub->n2)
+    {
+        ret = PAILLIER_ERROR_OUT_OF_MEMORY;
+        goto cleanup;
+    }
+
+cleanup:
+    
+    if (ret)
+    {
+        paillier_free_private_key(local_priv);
+        paillier_free_public_key(local_pub);
+    }
+    else
+    {
+        *priv = local_priv;
+        *pub = local_pub;
     }
 
     return ret;
@@ -307,7 +299,7 @@ uint32_t paillier_public_key_size(const paillier_public_key_t *pub)
     return 0;
 }
 
-uint8_t *paillier_public_key_serialize(const paillier_public_key_t *pub, uint8_t *buffer, uint32_t buffer_len, uint32_t *real_buffer_len)
+uint8_t *paillier_public_key_serialize(const paillier_public_key_t *pub, uint8_t *buffer, const uint32_t buffer_len, uint32_t *real_buffer_len)
 {
     uint32_t needed_len = 0;
     uint32_t n_len = 0;
@@ -337,35 +329,22 @@ uint8_t *paillier_public_key_serialize(const paillier_public_key_t *pub, uint8_t
     return buffer;
 }
 
-paillier_public_key_t *paillier_public_key_deserialize(const uint8_t *buffer, uint32_t buffer_len)
+static inline void paillier_free_public_key_cleanup(paillier_public_key_t *pub)
 {
-    paillier_public_key_t *pub = NULL;
-    uint32_t len = 0;
-    BN_CTX *ctx = NULL;
-
-    if (!buffer || buffer_len < (sizeof(uint32_t) + MIN_KEY_LEN_IN_BITS / 8))
+    if (pub)
     {
-        return NULL;
+        BN_free(pub->n);
+        BN_free(pub->n2);
     }
+}
 
-    pub = (paillier_public_key_t*)calloc(1, sizeof(paillier_public_key_t));
-    if (!pub)
-    {
-        return NULL;
-    }
-
-    memcpy(&len, buffer, sizeof(uint32_t));
-    assert(len == (buffer_len - sizeof(uint32_t)));
-
-    if (len > (buffer_len - sizeof(uint32_t)))
-    {
-        goto cleanup;
-    }
-
-    buffer_len -= sizeof(uint32_t);
-    buffer += sizeof(uint32_t);
-
-    pub->n = BN_bin2bn(buffer, len, NULL);
+static paillier_public_key_t* paillier_public_key_deserialize_internal(const uint8_t* buffer, 
+                                                                       uint32_t n_len, 
+                                                                       BN_CTX *ctx, 
+                                                                       paillier_public_key_t* pub)
+{
+    BN_CTX_start(ctx);
+    pub->n = BN_bin2bn(buffer, n_len, NULL);
     pub->n2 = BN_new();
 
     if (!pub->n || !pub->n2)
@@ -378,29 +357,76 @@ paillier_public_key_t *paillier_public_key_deserialize(const uint8_t *buffer, ui
         goto cleanup;
     }
 
-    ctx = BN_CTX_new();
-    if (!ctx || !BN_sqr(pub->n2, pub->n, ctx))
+    if (!BN_sqr(pub->n2, pub->n, ctx))
     {
         goto cleanup;
     }
 
+    BN_CTX_end(ctx);
+    return pub;
+
+cleanup:
+
+    BN_CTX_end(ctx);
+    paillier_free_public_key_cleanup(pub);
+    return NULL;
+}
+
+paillier_public_key_t *paillier_public_key_deserialize(const uint8_t *buffer, uint32_t buffer_len)
+{
+    paillier_public_key_t *pub = NULL;
+    uint32_t len = 0;
+    BN_CTX *ctx = NULL;
+
+    if (!buffer || buffer_len < (sizeof(uint32_t) + MIN_KEY_LEN_IN_BITS / 8))
+    {
+        return NULL;
+    }
+
+    ctx = BN_CTX_new();
+    if (!ctx)
+    {
+        return NULL;
+    }
+
+    pub = (paillier_public_key_t*)calloc(1, sizeof(paillier_public_key_t));
+    if (!pub)
+    {
+        goto cleanup;
+    }
+    
+    memcpy(&len, buffer, sizeof(uint32_t));
+    buffer_len -= sizeof(uint32_t);
+    buffer += sizeof(uint32_t);
+
+    assert(len == buffer_len);
+
+    if (len > buffer_len)
+    {
+        goto cleanup;
+    }
+
+    if (!paillier_public_key_deserialize_internal(buffer, len, ctx, pub))
+    {
+        goto cleanup;
+    }
+    
     BN_CTX_free(ctx);
     return pub;
 
 cleanup:
+
     BN_CTX_free(ctx);
     paillier_free_public_key(pub);
     return NULL;
 }
 
+
+
 void paillier_free_public_key(paillier_public_key_t *pub)
 {
-    if (pub)
-    {
-        BN_free(pub->n);
-        BN_free(pub->n2);
-        free(pub);
-    }
+    paillier_free_public_key_cleanup(pub);
+    free(pub);
 }
 
 long paillier_private_key_n(const paillier_private_key_t *priv, uint8_t *n, uint32_t n_len, uint32_t *n_real_len)
@@ -439,7 +465,7 @@ const paillier_public_key_t* paillier_private_key_get_public(const paillier_priv
     return NULL;
 }
 
-uint8_t *paillier_private_key_serialize(const paillier_private_key_t *priv, uint8_t *buffer, uint32_t buffer_len, uint32_t *real_buffer_len)
+uint8_t *paillier_private_key_serialize(const paillier_private_key_t *priv, uint8_t *buffer, const uint32_t buffer_len, uint32_t *real_buffer_len)
 {
     uint32_t needed_len = 0;
     uint32_t p_len = 0;
@@ -472,38 +498,17 @@ uint8_t *paillier_private_key_serialize(const paillier_private_key_t *priv, uint
     return buffer;
 }
 
-paillier_private_key_t *paillier_private_key_deserialize(const uint8_t *buffer, uint32_t buffer_len)
+static paillier_private_key_t* paillier_private_key_deserialize_internal(const uint8_t *buffer, 
+                                                                         uint32_t p_len,
+                                                                         paillier_private_key_t* priv, 
+                                                                         BN_CTX *ctx)
 {
-    paillier_private_key_t *priv = NULL;
-    uint32_t len = 0;
-    BN_CTX *ctx = NULL;
-
-    if (!buffer || buffer_len < (sizeof(uint32_t) + MIN_KEY_LEN_IN_BITS / 8)) // len(p) + len(q) == len(n)
-    {
-        return NULL;
-    }
-
-    priv = (paillier_private_key_t*)calloc(1, sizeof(paillier_private_key_t));
-
-    if (!priv)
-    {
-        return NULL;
-    }
-
-    memcpy(&len, buffer, sizeof(uint32_t));
     
-    assert(2 * len == (buffer_len - sizeof(uint32_t)));
-    if (2 * len > (buffer_len - sizeof(uint32_t)))
-    {
-        goto cleanup;
-    }
-
-    buffer_len -= sizeof(uint32_t);
-    buffer += sizeof(uint32_t);
-
-    priv->p = BN_bin2bn(buffer, len, NULL);
-    buffer += len;
-    priv->q = BN_bin2bn(buffer, len, NULL);
+    BN_CTX_start(ctx);
+ 
+    priv->p = BN_bin2bn(buffer, p_len, NULL);
+    buffer += p_len;
+    priv->q = BN_bin2bn(buffer, p_len, NULL);
     priv->pub.n = BN_new();
     priv->pub.n2 = BN_new();
     priv->lamda = BN_new();
@@ -520,14 +525,6 @@ paillier_private_key_t *paillier_private_key_deserialize(const uint8_t *buffer, 
     BN_set_flags(priv->pub.n2, BN_FLG_CONSTTIME);
     BN_set_flags(priv->lamda, BN_FLG_CONSTTIME);
     BN_set_flags(priv->mu, BN_FLG_CONSTTIME);
-
-    ctx = BN_CTX_new();
-    if (!ctx)
-    {
-        goto cleanup;
-    }
-
-    BN_CTX_start(ctx);
 
     if (!BN_mul(priv->pub.n, priv->p, priv->q, ctx))
     {
@@ -565,33 +562,74 @@ paillier_private_key_t *paillier_private_key_deserialize(const uint8_t *buffer, 
     }
 
     BN_CTX_end(ctx);
-    BN_CTX_free(ctx);
 
     return priv;
 
 cleanup:
-    if (ctx)
-    {
-        BN_CTX_end(ctx);
-        BN_CTX_free(ctx);
-    }
+
+    BN_CTX_end(ctx);
     
-    paillier_free_private_key(priv);
+    
     return NULL;
 }
 
-void paillier_free_private_key(paillier_private_key_t *priv)
+paillier_private_key_t* paillier_private_key_deserialize(const uint8_t* buffer, uint32_t buffer_len)
+{
+    paillier_private_key_t *priv = NULL;
+    BN_CTX *ctx = NULL;
+    
+    if (!buffer || buffer_len < (sizeof(uint32_t) + MIN_KEY_LEN_IN_BITS / 8)) // len(p) + len(q) == len(n)
+    {
+        return NULL;
+    }
+    
+    uint32_t len = 0;
+
+    memcpy(&len, buffer, sizeof(uint32_t));
+    buffer += sizeof(uint32_t);
+    buffer_len -= sizeof(uint32_t);
+
+    assert(2 * len  == buffer_len);
+    if (2 * len  > buffer_len)
+    {
+        return NULL;
+    }
+
+    ctx = BN_CTX_new();
+    if (!ctx)
+    {
+        return NULL;
+    }
+
+    priv = (paillier_private_key_t*)calloc(1, sizeof(paillier_private_key_t));
+
+    if (priv && !paillier_private_key_deserialize_internal(buffer, len, priv, ctx))
+    {
+        paillier_free_private_key(priv);
+        priv = NULL;
+    }
+
+    BN_CTX_free(ctx);
+
+    return priv;
+}
+
+static inline void paillier_free_private_key_cleanup(paillier_private_key_t *priv)
 {
     if (priv)
     {
-        BN_free(priv->pub.n);
-        BN_free(priv->pub.n2);
+        paillier_free_public_key_cleanup(&priv->pub);
         BN_clear_free(priv->p);
         BN_clear_free(priv->q);
         BN_clear_free(priv->lamda);
         BN_clear_free(priv->mu);
-        free(priv);
     }
+}
+
+void paillier_free_private_key(paillier_private_key_t *priv)
+{
+    paillier_free_private_key_cleanup(priv);
+    free(priv);
 }
 
 long paillier_encrypt_openssl_internal(const paillier_public_key_t *key, BIGNUM *ciphertext, const BIGNUM *r, const BIGNUM *plaintext, BN_CTX *ctx)
@@ -696,13 +734,13 @@ long paillier_decrypt_openssl_internal(const paillier_private_key_t *key, const 
         goto cleanup;
     }
 
-    // Compute the plaintext = L(ciphertext^lamda mod n2)*mu mod n
+    // Compute the plaintext = paillier_L(ciphertext^lamda mod n2)*mu mod n
     if (!BN_mod_exp(tmp, ciphertext, key->lamda, key->pub.n2, ctx))
     {
         goto cleanup;
     }
 
-    ret = L(tmp, tmp, key->pub.n, ctx);
+    ret = paillier_L(tmp, tmp, key->pub.n, ctx);
     if (ret != PAILLIER_SUCCESS)
     {
         goto cleanup;
@@ -718,7 +756,7 @@ long paillier_decrypt_openssl_internal(const paillier_private_key_t *key, const 
     ret = PAILLIER_SUCCESS;
 
 cleanup:
-    if (-1 != ret)
+    if (-1 == ret)
     {
         ret = ERR_get_error() * -1;
     }
@@ -753,11 +791,11 @@ long paillier_encrypt(const paillier_public_key_t *key, const uint8_t *plaintext
     {
         return PAILLIER_ERROR_INVALID_CIPHER_TEXT;
     }
-    
+
     ctx = BN_CTX_new();
     if (!ctx)
     {
-        goto cleanup;
+        return PAILLIER_ERROR_OUT_OF_MEMORY;
     }
     
     BN_CTX_start(ctx);
@@ -767,7 +805,7 @@ long paillier_encrypt(const paillier_public_key_t *key, const uint8_t *plaintext
     {
         goto cleanup;
     }
-    
+
     if (!BN_bin2bn(plaintext, plaintext_len, msg))
     {
         goto cleanup;
@@ -785,7 +823,7 @@ long paillier_encrypt(const paillier_public_key_t *key, const uint8_t *plaintext
     {
         goto cleanup;
     }
-    
+
     len = BN_bn2bin(c, ciphertext);
     if (len <= 0)
     {
@@ -831,7 +869,7 @@ long paillier_encrypt_to_ciphertext(const paillier_public_key_t *key, const uint
     {
         return PAILLIER_ERROR_INVALID_CIPHER_TEXT;
     }
-    
+
     c = (paillier_ciphertext_t*)calloc(1, sizeof(paillier_ciphertext_t));
     if (!c)
     {
@@ -852,7 +890,7 @@ long paillier_encrypt_to_ciphertext(const paillier_public_key_t *key, const uint
     {
         goto cleanup;
     }
-    
+
     BN_CTX_start(ctx);
     msg = BN_CTX_get(ctx);
     
@@ -883,7 +921,7 @@ long paillier_encrypt_to_ciphertext(const paillier_public_key_t *key, const uint
     {
         goto cleanup;
     }
-    
+
     *ciphertext = c;
     c = NULL;
 
@@ -929,7 +967,7 @@ long paillier_encrypt_integer(const paillier_public_key_t *key, uint64_t plainte
     {
         goto cleanup;
     }
-    
+
     BN_CTX_start(ctx);
     msg = BN_CTX_get(ctx);
     c = BN_CTX_get(ctx);
@@ -949,7 +987,7 @@ long paillier_encrypt_integer(const paillier_public_key_t *key, uint64_t plainte
     {
         goto cleanup;
     }
-    
+
     len = BN_bn2bin(c, ciphertext);
     if (len <= 0)
     {
@@ -1004,13 +1042,13 @@ long paillier_decrypt(const paillier_private_key_t *key, const uint8_t *cipherte
     {
         return PAILLIER_ERROR_INVALID_PLAIN_TEXT;
     }
-    
+
     ctx = BN_CTX_new();
     if (!ctx)
     {
         return PAILLIER_ERROR_OUT_OF_MEMORY;
     }
-    
+
     BN_CTX_start(ctx);
     c = BN_CTX_get(ctx);
     msg = BN_CTX_get(ctx);
@@ -1019,7 +1057,7 @@ long paillier_decrypt(const paillier_private_key_t *key, const uint8_t *cipherte
     {
         goto cleanup;
     }
-    
+
     if (!BN_bin2bn(ciphertext, ciphertext_len, c))
     {
         goto cleanup;
@@ -1037,7 +1075,7 @@ long paillier_decrypt(const paillier_private_key_t *key, const uint8_t *cipherte
     {
         goto cleanup;
     }
-    
+
     len = BN_bn2bin(msg, plaintext);
     if (len <= 0)
     {
@@ -1092,12 +1130,12 @@ long paillier_decrypt_integer(const paillier_private_key_t *key, const uint8_t *
     {
         return PAILLIER_ERROR_OUT_OF_MEMORY;
     }
-    
+        
     BN_CTX_start(ctx);
 
     c = BN_CTX_get(ctx);
     msg = BN_CTX_get(ctx);
-    
+
     if (!c || !msg) 
     {
         goto cleanup;
@@ -1144,8 +1182,14 @@ cleanup:
     return ret;
 }
 
-long paillier_add(const paillier_public_key_t *key, const uint8_t *a_ciphertext, uint32_t a_ciphertext_len, const uint8_t *b_ciphertext, uint32_t b_ciphertext_len, 
-    uint8_t *result, uint32_t result_len, uint32_t *result_real_len)
+long paillier_add(const paillier_public_key_t *key, 
+                  const uint8_t *a_ciphertext, 
+                  uint32_t a_ciphertext_len, 
+                  const uint8_t *b_ciphertext, 
+                  uint32_t b_ciphertext_len, 
+                  uint8_t *result, 
+                  uint32_t result_len, 
+                  uint32_t *result_real_len)
 {
     BN_CTX *ctx = NULL;
     BIGNUM *a = NULL;
@@ -1200,7 +1244,7 @@ long paillier_add(const paillier_public_key_t *key, const uint8_t *a_ciphertext,
     {
         goto cleanup;
     }
-    
+
     // verify that a_ciphertext and b_ciphertext are coprime to n
     if (is_coprime_fast(a, key->n, ctx) != 1 ||
         is_coprime_fast(b, key->n, ctx) != 1)
@@ -1276,7 +1320,7 @@ long paillier_add_integer(const paillier_public_key_t *key, const uint8_t *a_cip
     {
         return PAILLIER_ERROR_OUT_OF_MEMORY;
     }
-    
+
     BN_CTX_start(ctx);
     bn_a = BN_CTX_get(ctx);
     bn_b = BN_CTX_get(ctx);
@@ -1296,7 +1340,7 @@ long paillier_add_integer(const paillier_public_key_t *key, const uint8_t *a_cip
     {
         goto cleanup;
     }
-    
+        
     // verify that a_ciphertext and n are coprime
     if (is_coprime_fast(bn_a, key->n, ctx) != 1)
     {
@@ -1311,7 +1355,7 @@ long paillier_add_integer(const paillier_public_key_t *key, const uint8_t *a_cip
     }
     
     ret = -1; //reset ret so next open ssl error would be logged.
-    
+
     if (!BN_mod_mul(res, bn_a, res, key->n2, ctx))
     {
         goto cleanup;
@@ -1346,8 +1390,14 @@ cleanup:
     return ret;
 }
 
-long paillier_sub(const paillier_public_key_t *key, const uint8_t *a_ciphertext, uint32_t a_ciphertext_len, const uint8_t *b_ciphertext, uint32_t b_ciphertext_len, 
-    uint8_t *result, uint32_t result_len, uint32_t *result_real_len)
+long paillier_sub(const paillier_public_key_t *key, 
+                  const uint8_t *a_ciphertext, 
+                  uint32_t a_ciphertext_len, 
+                  const uint8_t *b_ciphertext, 
+                  uint32_t b_ciphertext_len, 
+                  uint8_t *result, 
+                  uint32_t result_len, 
+                  uint32_t *result_real_len)
 {
     BN_CTX *ctx = NULL;
     BIGNUM *a = NULL;
@@ -1401,7 +1451,7 @@ long paillier_sub(const paillier_public_key_t *key, const uint8_t *a_ciphertext,
     {
         goto cleanup;
     }
-    
+
     // verify that a_ciphertext and b_ciphertext are coprime to n
     if (is_coprime_fast(a, key->n, ctx) != 1 ||
         is_coprime_fast(b, key->n, ctx) != 1)
@@ -1551,8 +1601,14 @@ cleanup:
     return ret;
 }
 
-long paillier_mul(const paillier_public_key_t *key, const uint8_t *a_ciphertext, uint32_t a_ciphertext_len, const uint8_t *b_plaintext, uint32_t b_plaintext_len, 
-    uint8_t *result, uint32_t result_len, uint32_t *result_real_len)
+long paillier_mul(const paillier_public_key_t *key, 
+                  const uint8_t *a_ciphertext, 
+                  uint32_t a_ciphertext_len, 
+                  const uint8_t *b_plaintext, 
+                  uint32_t b_plaintext_len, 
+                  uint8_t *result, 
+                  uint32_t result_len, 
+                  uint32_t *result_real_len)
 {
     BN_CTX *ctx = NULL;
     BIGNUM *bn_a = NULL;
@@ -1574,7 +1630,7 @@ long paillier_mul(const paillier_public_key_t *key, const uint8_t *a_ciphertext,
     {
         return PAILLIER_ERROR_INVALID_PLAIN_TEXT;
     }
-    
+        
     if (result_real_len)
     {
         *result_real_len = (uint32_t)BN_num_bytes(key->n2);
@@ -1651,7 +1707,13 @@ cleanup:
     return ret;
 }
 
-long paillier_mul_integer(const paillier_public_key_t *key, const uint8_t *a_ciphertext, uint32_t a_ciphertext_len, uint64_t b, uint8_t *result, uint32_t result_len, uint32_t *result_real_len)
+long paillier_mul_integer(const paillier_public_key_t *key, 
+                          const uint8_t *a_ciphertext, 
+                          uint32_t a_ciphertext_len, 
+                          uint64_t b, 
+                          uint8_t *result, 
+                          uint32_t result_len, 
+                          uint32_t *result_real_len)
 {
     BN_CTX *ctx = NULL;
     BIGNUM *bn_a = NULL;
@@ -1685,7 +1747,7 @@ long paillier_mul_integer(const paillier_public_key_t *key, const uint8_t *a_cip
     {
         return PAILLIER_ERROR_OUT_OF_MEMORY;
     }
-    
+        
     BN_CTX_start(ctx);
     bn_a = BN_CTX_get(ctx);
     bn_b = BN_CTX_get(ctx);
@@ -1704,7 +1766,7 @@ long paillier_mul_integer(const paillier_public_key_t *key, const uint8_t *a_cip
     {
         goto cleanup;
     }
-    
+        
     // verify that a_ciphertext and n are coprime
     if (is_coprime_fast(bn_a, key->n, ctx) != 1)
     {
@@ -1747,7 +1809,10 @@ cleanup:
     return ret;
 }
 
-long paillier_get_ciphertext(const paillier_ciphertext_t *ciphertext_object, uint8_t *ciphertext, uint32_t ciphertext_len, uint32_t *ciphertext_real_len)
+long paillier_get_ciphertext(const paillier_ciphertext_t *ciphertext_object, 
+                             uint8_t *ciphertext, 
+                             uint32_t ciphertext_len, 
+                             uint32_t *ciphertext_real_len)
 {
     if (!ciphertext_object)
     {
@@ -1787,3 +1852,4 @@ void paillier_free_ciphertext(paillier_ciphertext_t *ciphertext_object)
         free(ciphertext_object);
     }
 }
+

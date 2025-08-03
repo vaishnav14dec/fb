@@ -146,6 +146,7 @@ static verifiable_secret_sharing_status verifiable_secret_sharing_split_impl(con
         goto cleanup;
     
     assert(BN_is_prime_ex(bn_prime, 1000, ctx, NULL));
+
     BN_set_flags(bn_prime, BN_FLG_CONSTTIME);
 
     if (BN_cmp(bn_secret, bn_prime) >= 0)
@@ -340,10 +341,26 @@ verifiable_secret_sharing_status verifiable_secret_sharing_get_share(const verif
         return VERIFIABLE_SECRET_SHARING_INVALID_PARAMETER;
     if (index >= shares->num_shares)
         return VERIFIABLE_SECRET_SHARING_INVALID_INDEX;
-    if (!shares->shares || !shares->shares[index])
+    if (!shares->shares)
+        return VERIFIABLE_SECRET_SHARING_UNKNOWN_ERROR;
+    if (!shares->ids)
         return VERIFIABLE_SECRET_SHARING_UNKNOWN_ERROR;
     share->id = shares->ids[index];
     memcpy(share->data, shares->shares[index], sizeof(shamir_secret_sharing_scalar_t));
+    return VERIFIABLE_SECRET_SHARING_SUCCESS;
+}
+
+verifiable_secret_sharing_status verifiable_secret_sharing_get_share_id(const verifiable_secret_sharing_t *shares, uint8_t index, uint64_t* id)
+{
+    if (!shares)
+        return VERIFIABLE_SECRET_SHARING_INVALID_PARAMETER;
+    if (index >= shares->num_shares)
+        return VERIFIABLE_SECRET_SHARING_INVALID_INDEX;
+    if (!shares->shares)
+        return VERIFIABLE_SECRET_SHARING_UNKNOWN_ERROR;
+    if (!shares->ids)
+        return VERIFIABLE_SECRET_SHARING_UNKNOWN_ERROR;
+    *id = shares->ids[index];
     return VERIFIABLE_SECRET_SHARING_SUCCESS;
 }
 
@@ -485,7 +502,7 @@ verifiable_secret_sharing_status verifiable_secret_sharing_reconstruct(const ell
     if (!ctx)
         return ret;
     BN_CTX_start(ctx);
-    
+
     bn_prime = algebra->order_internal(algebra);
     if (!bn_prime)
         goto cleanup;

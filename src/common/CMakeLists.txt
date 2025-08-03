@@ -2,6 +2,9 @@ set(COSIGNER_FILES
     blockchain/mpc/hd_derive.cpp
     crypto/commitments/commitments.c
     crypto/commitments/ring_pedersen.c
+    crypto/commitments/damgard_fujisaki.c
+    crypto/commitments/pedersen.c
+    crypto/paillier_commitment/paillier_commitment.c
     crypto/drng/drng.c
     crypto/ed25519_algebra/ed25519_algebra.c
     crypto/GFp_curve_algebra/GFp_curve_algebra.c
@@ -12,6 +15,9 @@ set(COSIGNER_FILES
     crypto/zero_knowledge_proof/diffie_hellman_log.c
     crypto/zero_knowledge_proof/range_proofs.c
     crypto/zero_knowledge_proof/schnorr.c
+    crypto/zero_knowledge_proof/damgard_fujisaki_zkp.c
+    crypto/algebra_utils/algebra_utils.c
+    crypto/algebra_utils/status_convert.c
     cosigner/asymmetric_eddsa_cosigner_client.cpp
     cosigner/asymmetric_eddsa_cosigner_server.cpp
     cosigner/asymmetric_eddsa_cosigner.cpp

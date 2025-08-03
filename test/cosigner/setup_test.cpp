@@ -154,7 +154,7 @@ private:
     byte_vector_t encrypt_for_player(uint64_t id, const byte_vector_t& data) const override {return data;}
     byte_vector_t decrypt_message(const byte_vector_t& encrypted_data) const override  {return encrypted_data;}
     bool backup_key(const std::string& key_id, cosigner_sign_algorithm algorithm, const elliptic_curve256_scalar_t& private_key, const cmp_key_metadata& metadata, const auxiliary_keys& aux) override {return true;}
-    void start_signing(const std::string& key_id, const std::string& txid, const signing_data& data, const std::string& metadata_json, const std::set<std::string>& players) override {}
+    void on_start_signing(const std::string& key_id, const std::string& txid, const signing_data& data, const std::string& metadata_json, const std::set<std::string>& players, const signing_type signature_type) override {}
     void fill_signing_info_from_metadata(const std::string& metadata, std::vector<uint32_t>& flags) const override {assert(0);}
     bool is_client_id(uint64_t player_id) const override {return false;}
 

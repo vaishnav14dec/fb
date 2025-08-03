@@ -55,7 +55,7 @@ private:
     byte_vector_t encrypt_for_player(uint64_t id, const byte_vector_t& data) const override {assert(0);}
     byte_vector_t decrypt_message(const byte_vector_t& encrypted_data) const override {assert(0);}
     bool backup_key(const std::string& key_id, cosigner_sign_algorithm algorithm, const elliptic_curve256_scalar_t& private_key, const cmp_key_metadata& metadata, const auxiliary_keys& aux) override {return true;}
-    void start_signing(const std::string& key_id, const std::string& txid, const signing_data& data, const std::string& metadata_json, const std::set<std::string>& players) override {}
+    void on_start_signing(const std::string& key_id, const std::string& txid, const signing_data& data, const std::string& metadata_json, const std::set<std::string>& players, const signing_type signature_type) override {}
     void fill_signing_info_from_metadata(const std::string& metadata, std::vector<uint32_t>& flags) const override
     {
         for (auto i = flags.begin(); i != flags.end(); ++i)
@@ -100,7 +100,7 @@ class online_signing_persistency : public cmp_ecdsa_online_signing_service::sign
         it->second = data;
     }
 
-    void delete_signing_data(const std::string& txid) override
+    void delete_temporary_signing_data(const std::string& txid) override
     {
         std::unique_lock lock(_mutex);
         _metadata.erase(txid);
@@ -171,8 +171,10 @@ static void ecdsa_sign(players_setup_info& players, cosigner_sign_algorithm type
     mta_requests.clear();
 
     std::map<uint64_t, std::vector<cmp_mta_deltas>> deltas;
+    auto mta_responses_saved = mta_responses;
     for (auto i = services.begin(); i != services.end(); ++i)
     {
+        mta_responses = mta_responses_saved;
         auto& delta = deltas[i->first];
         REQUIRE_NOTHROW(i->second->signing_service.mta_verify(txid, mta_responses, delta));
 
@@ -180,6 +182,7 @@ static void ecdsa_sign(players_setup_info& players, cosigner_sign_algorithm type
         REQUIRE_THROWS_AS(i->second->signing_service.mta_response(txid, mta_requests, MPC_CMP_ONLINE_VERSION, repeat_response), cosigner_exception);
 
         std::vector<cmp_mta_deltas> repeat_deltas;
+        mta_responses = mta_responses_saved;
         REQUIRE_THROWS_AS(i->second->signing_service.mta_verify(txid, mta_responses, repeat_deltas), cosigner_exception);
     }
     mta_responses.clear();

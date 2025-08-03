@@ -66,7 +66,7 @@ public:
         virtual void delete_commitments(const std::string& txid) = 0;
         virtual void store_signing_data(const std::string& txid, const asymmetric_eddsa_signing_metadata& data, bool update) = 0;
         virtual void load_signing_data(const std::string& txid, asymmetric_eddsa_signing_metadata& data) = 0;
-        virtual void delete_signing_data(const std::string& txid) = 0;
+        virtual void delete_temporary_signing_data(const std::string& txid) = 0;
     };
 
     asymmetric_eddsa_cosigner_server(platform_service& cosigner_service, const cmp_key_persistency& key_persistency, signing_persistency& signing_persistency);

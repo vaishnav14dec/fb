@@ -24,8 +24,8 @@ public:
 
         virtual void store_preprocessing_metadata(const std::string& request_id, const preprocessing_metadata& data, bool override = false) = 0;
         virtual void load_preprocessing_metadata(const std::string& request_id, preprocessing_metadata& data) const = 0;
-        virtual void store_preprocessing_data(const std::string& request_id, uint64_t index, const ecdsa_signing_data& data) = 0;
-        virtual void load_preprocessing_data(const std::string& request_id, uint64_t index, ecdsa_signing_data& data) const = 0;
+        virtual void store_preprocessing_data(const std::string& request_id, uint64_t index, const ecdsa_preprocessing_data& data) = 0;
+        virtual void load_preprocessing_data(const std::string& request_id, uint64_t index, ecdsa_preprocessing_data& data) const = 0;
         virtual void delete_preprocessing_data(const std::string& request_id) = 0;
         
         // This function should allocate preprocessed data array sized size
@@ -44,8 +44,8 @@ public:
     uint64_t offline_mta_response(const std::string& request_id, const std::map<uint64_t, std::vector<cmp_mta_request>>& requests, cmp_mta_responses& response);
     uint64_t offline_mta_verify(const std::string& request_id, const std::map<uint64_t, cmp_mta_responses>& mta_responses, std::vector<cmp_mta_deltas>& deltas);
     uint64_t store_presigning_data(const std::string& request_id, const std::map<uint64_t, std::vector<cmp_mta_deltas>>& deltas, std::string& key_id);
-    void ecdsa_sign(const std::string& key_id, const std::string& txid, const signing_data& data, const std::string& metadata_json, const std::set<std::string>& players, const std::set<uint64_t>& players_ids, uint64_t preprocessed_data_index,
-                            std::vector<recoverable_signature>& partial_sigs);
+    void ecdsa_sign(const std::string& key_id, const std::string& txid, const signing_data& data, const std::string& metadata_json, const std::set<std::string>& players, const std::set<uint64_t>& players_ids, uint64_t preprocessed_data_index, int protocol_version, 
+    std::vector<recoverable_signature>& partial_sigs);
     uint64_t ecdsa_offline_signature(const std::string& key_id, const std::string& txid, cosigner_sign_algorithm algorithm, const std::map<uint64_t, std::vector<recoverable_signature>>& partial_sigs, 
         std::vector<recoverable_signature>& sigs);
 

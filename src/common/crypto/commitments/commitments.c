@@ -130,3 +130,4 @@ void commitments_ctx_free(commitments_ctx_t *ctx)
     if (ctx)
         free(ctx);
 }
+

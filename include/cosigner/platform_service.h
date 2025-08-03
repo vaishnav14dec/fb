@@ -42,7 +42,14 @@ public:
     virtual bool backup_key(const std::string& key_id, cosigner_sign_algorithm algorithm, const elliptic_curve256_scalar_t& private_key, const cmp_key_metadata& metadata, const auxiliary_keys& aux) = 0;
 
     // this is a callback to notify about a new signing request, this is a good point to verify the request data, this function should thow exception if the signing request is not authorized
-    virtual void start_signing(const std::string& key_id, const std::string& txid, const signing_data& data, const std::string& metadata_json, const std::set<std::string>& players) = 0;
+    enum signing_type
+    {
+        MULTI_ROUND_SIGNATURE,  // All signatures beside BAM
+        SINGLE_ROUND_SIGNATURE  // For now only BAM client
+    };
+
+    // this is a callback to notify about a new signing request, this is a good point to verify the request data, this function should thow exception if the signing request is not authorized
+    virtual void on_start_signing(const std::string& key_id, const std::string& txid, const signing_data& data, const std::string& metadata_json, const std::set<std::string>& players, const signing_type signature_type) = 0;
     // set the siging flags (as bitset of SIGNING_FLAGS) based on the metadata
     virtual void fill_signing_info_from_metadata(const std::string& metadata, std::vector<uint32_t>& flags) const = 0;
     // returns if the player id is a client device, used in asymmetric protocols

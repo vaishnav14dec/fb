@@ -1,6 +1,7 @@
 #include "crypto/ed25519_algebra/ed25519_algebra.h"
 #include "crypto/elliptic_curve_algebra/elliptic_curve256_algebra.h"
 #include "crypto/keccak1600/keccak1600.h"
+
 #include "curve25519.c"
 
 #include "crypto/common/byteswap.h"
@@ -8,13 +9,25 @@
 #include <openssl/bn.h>
 #include <openssl/sha.h>
 
-const uint8_t ED25519_FIELD[] = {
+// this is big endian value of 0x1000000000000000000000000000000013E974E72F8A692C2FB98D0599FD6765
+const uint8_t ED25519_FIELD[] =
+{
     0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x14, 0xde, 0xf9, 0xde, 0xa2, 0xf7, 0x9c, 0xd6, 0x58, 0x12, 0x63, 0x1a, 0x5c, 0xf5, 0xd3, 0xed};
+    0x14, 0xde, 0xf9, 0xde, 0xa2, 0xf7, 0x9c, 0xd6, 0x58, 0x12, 0x63, 0x1a, 0x5c, 0xf5, 0xd3, 0xed
+};
+
+static const uint8_t ED25519_FIELD_LITTLE_ENDIAN[] = 
+{
+    0xed, 0xd3, 0xf5, 0x5c, 0x1a, 0x63, 0x12, 0x58, 0xd6, 0x9c, 0xf7, 0xa2, 0xde, 0xf9, 0xde, 0x14, 
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10
+};
+
+
 
 struct ed25519_algebra_ctx
 {
-    BIGNUM *L;
+    BIGNUM *L; //order of the cuve
+    BIGNUM *P; //order of the field of each coordinate
 };
 
 ed25519_algebra_ctx_t *ed25519_algebra_ctx_new()
@@ -26,7 +39,7 @@ ed25519_algebra_ctx_t *ed25519_algebra_ctx_new()
         ctx->L = BN_bin2bn(ED25519_FIELD, sizeof(ED25519_FIELD), NULL);
         if (!ctx->L)
         {
-            free(ctx);
+            ed25519_algebra_ctx_free(ctx);
             return NULL;
         }
         BN_set_flags(ctx->L, BN_FLG_CONSTTIME);
@@ -113,17 +126,22 @@ static elliptic_curve_algebra_status to_ed25519_scalar(const ed25519_algebra_ctx
 {
     BN_CTX *bn_ctx = NULL;
     BIGNUM *bn_n = NULL;
-    elliptic_curve_algebra_status ret = ELLIPTIC_CURVE_ALGEBRA_OUT_OF_MEMORY;
+    elliptic_curve_algebra_status ret = ELLIPTIC_CURVE_ALGEBRA_UNKNOWN_ERROR;
 
     bn_ctx = BN_CTX_new();
     if (!bn_ctx)
+    {
         return ELLIPTIC_CURVE_ALGEBRA_OUT_OF_MEMORY;
+    }
 
     BN_CTX_start(bn_ctx);
 
     bn_n = BN_CTX_get(bn_ctx);
     if (!bn_n || !BN_bin2bn(num, num_size, bn_n))
+    {
+        ret = ELLIPTIC_CURVE_ALGEBRA_OUT_OF_MEMORY;
         goto cleanup;
+    }
 
     BN_set_flags(bn_n, BN_FLG_CONSTTIME);
 
@@ -131,8 +149,6 @@ static elliptic_curve_algebra_status to_ed25519_scalar(const ed25519_algebra_ctx
     {
         ret = BN_bn2lebinpad(bn_n, *res, sizeof(ed25519_le_scalar_t)) > 0 ? ELLIPTIC_CURVE_ALGEBRA_SUCCESS : ELLIPTIC_CURVE_ALGEBRA_UNKNOWN_ERROR;
     }
-    else
-        ret = ELLIPTIC_CURVE_ALGEBRA_UNKNOWN_ERROR;
 
 cleanup:
     if (bn_n)
@@ -177,8 +193,12 @@ elliptic_curve_algebra_status ed25519_algebra_verify(const ed25519_algebra_ctx_t
     return ret;
 }
 
-elliptic_curve_algebra_status ed25519_algebra_verify_linear_combination(const ed25519_algebra_ctx_t *ctx, const ed25519_point_t *sum_point, const ed25519_point_t *proof_points, const ed25519_scalar_t *coefficients,
-    uint32_t points_count, uint8_t *result)
+elliptic_curve_algebra_status ed25519_algebra_verify_linear_combination(const ed25519_algebra_ctx_t *ctx,
+                                                                        const ed25519_point_t *sum_point,
+                                                                        const ed25519_point_t *proof_points,
+                                                                        const ed25519_scalar_t *coefficients,
+                                                                        uint32_t points_count,
+                                                                        uint8_t *result)
 {
     ge_p3 sum;
     ed25519_point_t ecpoint;
@@ -275,7 +295,7 @@ elliptic_curve_algebra_status ed25519_algebra_point_mul(const ed25519_algebra_ct
         return ELLIPTIC_CURVE_ALGEBRA_INVALID_POINT;
 
     if (!ed25519_to_scalar(*exp, local_exp))
-            return ELLIPTIC_CURVE_ALGEBRA_INVALID_SCALAR;
+        return ELLIPTIC_CURVE_ALGEBRA_INVALID_SCALAR;
     if (ed25519_scalar_mult(*res, local_exp, *p))
         return ELLIPTIC_CURVE_ALGEBRA_SUCCESS;
     else
@@ -313,7 +333,9 @@ elliptic_curve_algebra_status ed25519_algebra_add_scalars(const ed25519_algebra_
         ret = BN_bn2binpad(bn_a, *res, sizeof(ed25519_scalar_t)) > 0 ? ELLIPTIC_CURVE_ALGEBRA_SUCCESS : ELLIPTIC_CURVE_ALGEBRA_UNKNOWN_ERROR;
     }
     else
+    {
         ret = ELLIPTIC_CURVE_ALGEBRA_UNKNOWN_ERROR;
+    }
 
 cleanup:
     if (bn_a)
@@ -356,7 +378,9 @@ elliptic_curve_algebra_status ed25519_algebra_sub_scalars(const ed25519_algebra_
         ret = BN_bn2binpad(bn_a, *res, sizeof(ed25519_scalar_t)) > 0 ? ELLIPTIC_CURVE_ALGEBRA_SUCCESS : ELLIPTIC_CURVE_ALGEBRA_UNKNOWN_ERROR;
     }
     else
+    {
         ret = ELLIPTIC_CURVE_ALGEBRA_UNKNOWN_ERROR;
+    }
 
 cleanup:
     if (bn_a)
@@ -399,7 +423,9 @@ elliptic_curve_algebra_status ed25519_algebra_mul_scalars(const ed25519_algebra_
         ret = BN_bn2binpad(bn_a, *res, sizeof(ed25519_scalar_t)) > 0 ? ELLIPTIC_CURVE_ALGEBRA_SUCCESS : ELLIPTIC_CURVE_ALGEBRA_UNKNOWN_ERROR;
     }
     else
+    {
         ret = ELLIPTIC_CURVE_ALGEBRA_UNKNOWN_ERROR;
+    }
 
 cleanup:
     if (bn_a)
@@ -448,7 +474,9 @@ elliptic_curve_algebra_status ed25519_algebra_add_le_scalars(const ed25519_algeb
         ret = BN_bn2lebinpad(bn_a, *res, sizeof(ed25519_scalar_t)) > 0 ? ELLIPTIC_CURVE_ALGEBRA_SUCCESS : ELLIPTIC_CURVE_ALGEBRA_UNKNOWN_ERROR;
     }
     else
+    {
         ret = ELLIPTIC_CURVE_ALGEBRA_UNKNOWN_ERROR;
+    }
 
 cleanup:
     if (bn_a)
@@ -532,7 +560,11 @@ elliptic_curve_algebra_status ed25519_algebra_reduce(const ed25519_algebra_ctx_t
     return ELLIPTIC_CURVE_ALGEBRA_SUCCESS;
 }
 
-elliptic_curve_algebra_status ed25519_algebra_mul_add(const ed25519_algebra_ctx_t *ctx, ed25519_le_scalar_t *res, const ed25519_le_scalar_t *a, const ed25519_le_scalar_t *b, const ed25519_le_scalar_t *c)
+elliptic_curve_algebra_status ed25519_algebra_mul_add(const ed25519_algebra_ctx_t *ctx,
+                                                      ed25519_le_scalar_t *res,
+                                                      const ed25519_le_scalar_t *a,
+                                                      const ed25519_le_scalar_t *b,
+                                                      const ed25519_le_scalar_t *c)
 {
     if (!ctx || !res || !a || !b || !c)
         return ELLIPTIC_CURVE_ALGEBRA_INVALID_PARAMETER;
@@ -541,7 +573,13 @@ elliptic_curve_algebra_status ed25519_algebra_mul_add(const ed25519_algebra_ctx_
     return ELLIPTIC_CURVE_ALGEBRA_SUCCESS;
 }
 
-elliptic_curve_algebra_status ed25519_calc_hram(const ed25519_algebra_ctx_t *ctx, ed25519_le_scalar_t *hram, const ed25519_point_t *R, const ed25519_point_t *public_key, const uint8_t *message, uint32_t message_size, uint8_t use_keccak)
+elliptic_curve_algebra_status ed25519_calc_hram(const ed25519_algebra_ctx_t *ctx,
+                                                ed25519_le_scalar_t *hram,
+                                                const ed25519_point_t *R,
+                                                const ed25519_point_t *public_key,
+                                                const uint8_t *message,
+                                                uint32_t message_size,
+                                                uint8_t use_keccak)
 {
     if (!ctx || !hram || !R || !public_key || !message || !message_size)
         return ELLIPTIC_CURVE_ALGEBRA_INVALID_PARAMETER;
@@ -568,7 +606,12 @@ elliptic_curve_algebra_status ed25519_calc_hram(const ed25519_algebra_ctx_t *ctx
     return ed25519_algebra_reduce(ctx, hram, &hash);
 }
 
-elliptic_curve_algebra_status ed25519_algebra_sign(const ed25519_algebra_ctx_t *ctx, const ed25519_scalar_t *private_key, const uint8_t *message, uint32_t message_size, uint8_t use_keccak, uint8_t signature[64])
+elliptic_curve_algebra_status ed25519_algebra_sign(const ed25519_algebra_ctx_t *ctx,
+                                                   const ed25519_scalar_t *private_key,
+                                                   const uint8_t *message,
+                                                   uint32_t message_size,
+                                                   uint8_t use_keccak,
+                                                   uint8_t signature[64])
 {
     elliptic_curve_algebra_status status;
     SHA512_CTX hash_ctx;
@@ -603,12 +646,19 @@ elliptic_curve_algebra_status ed25519_algebra_sign(const ed25519_algebra_ctx_t *
     ed25519_algebra_mul_add(ctx, &s, &hram, &priv, &k);
     memcpy(signature, R, 32);
     memcpy(signature + 32, s, 32);
+
     OPENSSL_cleanse(k, sizeof(ed25519_le_scalar_t));
     OPENSSL_cleanse(priv, sizeof(ed25519_le_scalar_t));
+
     return ELLIPTIC_CURVE_ALGEBRA_SUCCESS;
 }
 
-int ed25519_verify(const ed25519_algebra_ctx_t *ctx, const uint8_t *message, size_t message_len, const uint8_t signature[64], const uint8_t public_key[32], uint8_t use_keccak)
+int ed25519_verify(const ed25519_algebra_ctx_t *ctx,
+                   const uint8_t *message,
+                   size_t message_len,
+                   const uint8_t signature[64],
+                   const uint8_t public_key[32],
+                   uint8_t use_keccak)
 {
     if (!ctx || !signature || !message || !message_len || !public_key)
         return 0;
@@ -623,7 +673,8 @@ int ed25519_verify(const ed25519_algebra_ctx_t *ctx, const uint8_t *message, siz
     uint8_t rcheck[32];
     uint8_t h[SHA512_DIGEST_LENGTH];
     /* 27742317777372353535851937790883648493 in little endian format */
-    const uint8_t l_low[16] = {
+    const uint8_t l_low[16] =
+    {
         0xED, 0xD3, 0xF5, 0x5C, 0x1A, 0x63, 0x12, 0x58, 0xD6, 0x9C, 0xF7, 0xA2,
         0xDE, 0xF9, 0xDE, 0x14
     };
@@ -641,14 +692,16 @@ int ed25519_verify(const ed25519_algebra_ctx_t *ctx, const uint8_t *message, siz
      */
     if (s[31] > 0x10)
         return 0;
-    if (s[31] == 0x10) {
+    if (s[31] == 0x10)
+    {
         /*
          * Most significant byte indicates a value close to 2^252 so check the
          * rest
          */
         if (memcmp(s + 16, allzeroes, sizeof(allzeroes)) != 0)
             return 0;
-        for (i = 15; i >= 0; i--) {
+        for (i = 15; i >= 0; i--)
+        {
             if (s[i] < l_low[i])
                 break;
             if (s[i] > l_low[i])
@@ -658,7 +711,8 @@ int ed25519_verify(const ed25519_algebra_ctx_t *ctx, const uint8_t *message, siz
             return 0;
     }
 
-    if (ge_frombytes_vartime(&A, public_key) != 0) {
+    if (ge_frombytes_vartime(&A, public_key) != 0)
+    {
         return 0;
     }
 
@@ -676,6 +730,7 @@ int ed25519_verify(const ed25519_algebra_ctx_t *ctx, const uint8_t *message, siz
     ge_double_scalarmult_vartime(&R, h, &A, s);
 
     ge_tobytes(rcheck, &R);
+
     return CRYPTO_memcmp(rcheck, r, sizeof(rcheck)) == 0;
 }
 
@@ -686,6 +741,7 @@ elliptic_curve_algebra_status ed25519_algebra_le_to_be(ed25519_scalar_t *res, co
         return ELLIPTIC_CURVE_ALGEBRA_INVALID_PARAMETER;
     memcpy(&tmp, *n, (sizeof(ed25519_le_scalar_t)));
     bswap_256(tmp, *res);
+
     return ELLIPTIC_CURVE_ALGEBRA_SUCCESS;
 }
 
@@ -696,6 +752,7 @@ elliptic_curve_algebra_status ed25519_algebra_be_to_le(ed25519_le_scalar_t *res,
         return ELLIPTIC_CURVE_ALGEBRA_INVALID_PARAMETER;
     memcpy(&tmp, *n, (sizeof(ed25519_scalar_t)));
     bswap_256(tmp, *res);
+
     return ELLIPTIC_CURVE_ALGEBRA_SUCCESS;
 }
 
@@ -715,12 +772,14 @@ static int release(elliptic_curve256_algebra_ctx_t *ctx)
 static const uint8_t *ed25519_order(const elliptic_curve256_algebra_ctx_t *ctx)
 {
     (void)(ctx);
+
     return ED25519_FIELD;
 }
 
 static uint8_t ed25519_point_size(const elliptic_curve256_algebra_ctx_t *ctx)
 {
     (void)(ctx);
+
     return ED25519_COMPRESSED_POINT_LEN;
 }
 
@@ -775,7 +834,10 @@ static elliptic_curve_algebra_status generator_mul(const elliptic_curve256_algeb
     return ed25519_algebra_generator_mul_data(ctx->ctx, *exp, sizeof(elliptic_curve256_scalar_t), (ed25519_point_t*)res);
 }
 
-static elliptic_curve_algebra_status add_points(const elliptic_curve256_algebra_ctx_t *ctx, elliptic_curve256_point_t *res, const elliptic_curve256_point_t *p1, const elliptic_curve256_point_t *p2)
+static elliptic_curve_algebra_status add_points(const elliptic_curve256_algebra_ctx_t *ctx,
+                                                elliptic_curve256_point_t *res,
+                                                const elliptic_curve256_point_t *p1,
+                                                const elliptic_curve256_point_t *p2)
 {
     if (!ctx || !res || ctx->type != ELLIPTIC_CURVE_ED25519)
         return ELLIPTIC_CURVE_ALGEBRA_INVALID_PARAMETER;
@@ -841,18 +903,47 @@ static elliptic_curve_algebra_status ec_rand(const struct elliptic_curve256_alge
     return ed25519_algebra_rand(ctx->ctx, res);
 }
 
+/**
+ * @brief Checks if a given scalar value is within the Ed25519 field order.
+ *
+ * This function determines whether the given scalar `val` is strictly less
+ * than the Ed25519 field order by performing a big-endian comparison.
+ * It processes the 256-bit value in 32-bit chunks and propagates a borrow bit
+ * to detect whether an underflow occurs.
+ *
+ * The function operates as follows:
+ * - The scalar `val` is interpreted as an array of 32-bit words.
+ * - `ED25519_FIELD_LITTLE_ENDIAN` is the reference field order in little-endian format.
+ * - Each 32-bit word in `val` is byte-swapped to convert from big-endian to little-endian.
+ * - The function performs a subtraction of `val` from `ED25519_FIELD_LITTLE_ENDIAN`
+ *   while tracking borrow propagation.
+ * - If an underflow occurs (borrow is set), it means that `val` is greater than or equal
+ *   to the field order, and the function returns 0.
+ * - If no underflow occurs (borrow remains 0 at the end), `val` is within the valid range,
+ *   and the function returns 1.
+ *
+ * This function runs in constant time to prevent timing-based side-channel attacks.
+ *
+ * @param val   The scalar value to check, represented as a 256-bit integer.
+ * @return      1 if `val` is strictly less than the field order, 0 otherwise.
+ */
 static uint8_t in_field(const elliptic_curve256_scalar_t val)
 {
-    uint64_t cc = 0;
-    const uint32_t *ptr1 = (const uint32_t*)val;
-    const uint32_t *ptr2 = (const uint32_t*)ED25519_FIELD;
-    for (size_t i = sizeof(elliptic_curve256_scalar_t) / sizeof(uint32_t); i > 0; i --)
+    uint8_t borrow = 0; // Tracks underflow during subtraction
+    const uint32_t *ptr1 = (const uint32_t*)val; // Scalar value as 32-bit words
+    const uint32_t *ptr2 = (const uint32_t*)ED25519_FIELD_LITTLE_ENDIAN; // Field order in little-endian
+
+    // Iterate over 32-bit segments, processing from least significant to most significant
+    for (size_t i = 0; i < sizeof(elliptic_curve256_scalar_t) / sizeof(uint32_t); ++i)
     {
-        uint64_t v1 = bswap_32(ptr1[i - 1]);
-        uint64_t v2 = bswap_32(ptr2[i - 1]);
-        cc = ((v1 - v2 - cc) >> 32) & 1;
+        uint64_t v1 = bswap_32(ptr1[sizeof(elliptic_curve256_scalar_t) / sizeof(uint32_t) - 1 - i]); // Convert to little-endian
+        uint64_t v2 = ptr2[i];
+
+        // Perform subtraction with borrow tracking
+        borrow = ((v1 - v2 - borrow) >> 32) & 0x1;
     }
-    return cc;
+
+    return borrow; // 1 if `val` is less than the field order, 0 otherwise
 }
 
 static elliptic_curve_algebra_status reduce(const struct elliptic_curve256_algebra_ctx *ctx, elliptic_curve256_scalar_t *res, const elliptic_curve256_scalar_t *val)
@@ -886,6 +977,74 @@ static const struct bignum_st *order_internal(const elliptic_curve256_algebra_ct
     return NULL;
 }
 
+/**
+ * @brief Maps a message to a valid Ed25519 elliptic curve point using a simple hash function.
+ *
+ * This function attempts to map an arbitrary message to a point on the Ed25519 curve 
+ * by using a hashing approach. It performs the following steps:
+ *
+ * 1. Computes a SHA-512 hash of the input message.
+ * 2. Interprets the hash as a candidate point and checks if it is a valid Ed25519 point.
+ * 3. If the point is invalid, it re-hashes the previous hash and repeats.
+ * 4. If a valid point is found within a maximum number of attempts (`max_retries`), 
+ *    the function returns the point.
+ * 5. If no valid point is found after `max_retries`, the function returns an error.
+ *
+ * This approach is commonly used in hash-to-curve operations where a message is mapped
+ * deterministically to an elliptic curve point.
+ *
+ * @param algebra  The elliptic curve algebra context (must be of type `ELLIPTIC_CURVE_ED25519`).
+ * @param res      The output buffer to store the computed elliptic curve point.
+ * @param msg      The input message to be hashed and mapped to the curve.
+ * @param msg_len  The length of the input message.
+ * @return         `ELLIPTIC_CURVE_ALGEBRA_SUCCESS` if a valid point is found,
+ *                 `ELLIPTIC_CURVE_ALGEBRA_INVALID_POINT` if no valid point is found within the retry limit,
+ *                 or `ELLIPTIC_CURVE_ALGEBRA_INVALID_PARAMETER` if inputs are null or incorrect.
+ */
+static elliptic_curve_algebra_status simple_hash_to_curve(const struct elliptic_curve256_algebra_ctx *algebra,
+                                                          elliptic_curve256_point_t *res,
+                                                          const uint8_t* msg,
+                                                          uint32_t msg_len)
+{
+    uint8_t hash[SHA512_DIGEST_LENGTH];  // Buffer to store the SHA-512 hash
+    uint32_t max_retries = 1024;         // Maximum number of retries to find a valid point
+    SHA512_CTX hash_ctx;                 // SHA-512 context
+    elliptic_curve_algebra_status status = ELLIPTIC_CURVE_ALGEBRA_INVALID_POINT;
+
+    // Validate input parameters
+    if (!algebra || !res || (msg_len && !msg) || algebra->type != ELLIPTIC_CURVE_ED25519)
+    {
+        return ELLIPTIC_CURVE_ALGEBRA_INVALID_PARAMETER;
+    }
+
+    // Clear the result buffer
+    OPENSSL_cleanse(*res, sizeof(elliptic_curve256_point_t));
+
+    // Compute initial SHA-512 hash of the input message
+    SHA512_Init(&hash_ctx);
+    SHA512_Update(&hash_ctx, msg, msg_len);
+    SHA512_Final(hash, &hash_ctx);
+
+    // Try to map the hash to a valid Ed25519 point
+    while (0 != --max_retries)
+    {
+        // Check if the hashed value is a valid Ed25519 point
+        if (ed25519_is_valid_point(hash))
+        {        
+            memcpy(res, hash, sizeof(ed25519_point_t));
+            status = ELLIPTIC_CURVE_ALGEBRA_SUCCESS;
+            break;
+        }
+        
+        // If invalid, re-hash and try again
+        SHA512_Init(&hash_ctx);
+        SHA512_Update(&hash_ctx, hash, sizeof(hash));
+        SHA512_Final(hash, &hash_ctx);
+    }
+
+    return status;
+}
+
 elliptic_curve256_algebra_ctx_t* elliptic_curve256_new_ed25519_algebra()
 {
     elliptic_curve256_algebra_ctx_t *ctx = malloc(sizeof(elliptic_curve256_algebra_ctx_t));
@@ -909,7 +1068,9 @@ elliptic_curve256_algebra_ctx_t* elliptic_curve256_new_ed25519_algebra()
     ctx->mul_scalars = mul_scalars;
     ctx->inverse = inverse;
     ctx->rand = ec_rand;
-    ctx->reduce = reduce;
     ctx->order_internal = order_internal;
+    ctx->reduce = reduce;
+    ctx->hash_on_curve = simple_hash_to_curve;
+    
     return ctx;
 }

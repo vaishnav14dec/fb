@@ -55,10 +55,10 @@ void eddsa_online_signing_service::start_signing(const std::string& key_id, cons
     if (metadata.algorithm != EDDSA_ED25519)
     {
         LOG_ERROR("key %s has algorithm %s, but the request is for eddsa", key_id.c_str(), to_string(metadata.algorithm));
-        throw cosigner_exception(cosigner_exception::INVALID_PARAMETERS);    
+        throw cosigner_exception(cosigner_exception::INVALID_PARAMETERS);
     }
 
-    if (players_ids.size() != metadata.t)
+    if (players_ids.size() < metadata.t)
     {
         LOG_ERROR("invalid number of signers for keyid = %s, txid = %s, signers = %lu", key_id.c_str(), txid.c_str(), players_ids.size());
         throw cosigner_exception(cosigner_exception::INVALID_PARAMETERS);
@@ -72,7 +72,7 @@ void eddsa_online_signing_service::start_signing(const std::string& key_id, cons
         }
     }
 
-    _service.start_signing(key_id, txid, data, metadata_json, players);
+    _service.on_start_signing(key_id, txid, data, metadata_json, players, platform_service::MULTI_ROUND_SIGNATURE);
 
 #ifdef MOBILE
     _timing_map.insert(txid);
@@ -93,28 +93,15 @@ void eddsa_online_signing_service::start_signing(const std::string& key_id, cons
 
     commitments.reserve(blocks);
     info.sig_data.reserve(blocks);
-    
-    elliptic_curve_algebra_status status = ELLIPTIC_CURVE_ALGEBRA_UNKNOWN_ERROR;
-    elliptic_curve256_scalar_t k;
 
+    
     for (size_t i = 0; i < blocks; i++)
     {
-        size_t j = 0;
-        while (j < 1024 && status != ELLIPTIC_CURVE_ALGEBRA_SUCCESS)
-        {
-            j++;
-            status = _ed25519->rand(_ed25519.get(), &k);
-        }
-
-        if (status != ELLIPTIC_CURVE_ALGEBRA_SUCCESS)
-        {
-            LOG_ERROR("Failed to generate k");
-            throw cosigner_exception(cosigner_exception::INTERNAL_ERROR);
-        }
-        
+        elliptic_curve_scalar k;
         eddsa_signature_data sigdata;
-        throw_cosigner_exception(_ed25519->generator_mul(_ed25519.get(), &sigdata.R.data, &k));
-        throw_cosigner_exception(ed25519_algebra_be_to_le(&sigdata.k.data, &k));
+        throw_cosigner_exception(_ed25519->rand(_ed25519.get(), &k.data));
+        throw_cosigner_exception(_ed25519->generator_mul(_ed25519.get(), &sigdata.R.data, &k.data));
+        throw_cosigner_exception(ed25519_algebra_be_to_le(&sigdata.k.data, &k.data));
         commitment commit;
         throw_cosigner_exception(commitments_create_commitment_for_data(sigdata.R.data, sizeof(elliptic_curve256_point_t), &commit.data));
         commitments.push_back(commit);
@@ -124,12 +111,11 @@ void eddsa_online_signing_service::start_signing(const std::string& key_id, cons
         sigdata.flags = NONE;
         info.sig_data.push_back(sigdata);
     }
-    OPENSSL_cleanse(k, sizeof(elliptic_curve256_scalar_t));
     std::vector<uint32_t> flags(blocks, 0);
     _service.fill_signing_info_from_metadata(metadata_json, flags);
     for (size_t i = 0; i < blocks; i++)
         info.sig_data[i].flags = flags[i];
-    _signing_persistency.store_signing_data(txid, info);    
+    _signing_persistency.store_signing_data(txid, info);
 }
 
 uint64_t eddsa_online_signing_service::store_commitments(const std::string& txid, const std::map<uint64_t, std::vector<commitment>>& commitments, uint32_t version, std::vector<elliptic_curve_point>& R)
@@ -142,7 +128,9 @@ uint64_t eddsa_online_signing_service::store_commitments(const std::string& txid
     verify_tenant_id(_service, _key_persistency, data.key_id);
     
 #ifndef MOBILE
-    _timing_map.insert(txid);
+    {
+        _timing_map.insert(txid);
+    }
 #endif
 
 
@@ -248,6 +236,17 @@ uint64_t eddsa_online_signing_service::broadcast_si(const std::string& txid, con
     ed25519_algebra_ctx_t* ed25519 = (ed25519_algebra_ctx_t*)_ed25519->ctx;
     static const PrivKey ZERO = {0};
 
+    elliptic_curve_scalar share;
+    cosigner_sign_algorithm algo;
+    _key_persistency.load_key(data.key_id, algo, share.data);
+    if (algo != metadata.algorithm)
+    {
+        LOG_FATAL("key algorithm %d is different from the key metadata algorithm %d", algo, metadata.algorithm);
+        throw cosigner_exception(cosigner_exception::INTERNAL_ERROR);
+    }
+    
+    elliptic_curve_scalar x;
+
     for (size_t i = 0; i < data.sig_data.size(); ++i)
     {
         bool first = true;
@@ -263,30 +262,32 @@ uint64_t eddsa_online_signing_service::broadcast_si(const std::string& txid, con
                 throw_cosigner_exception(_ed25519->add_points(_ed25519.get(), &data.sig_data[i].R.data, &data.sig_data[i].R.data, &j->second[i].data));
         }
 
-        elliptic_curve256_scalar_t delta;
+        elliptic_curve256_scalar_t delta = {0};
         elliptic_curve256_point_t derived_public_key;
-        // hd_derive_status derivation_status = derive_public_key_generic(_ed25519.get(), derived_public_key, metadata.public_key, data.chaincode, data.sig_data[i].path.data(), data.sig_data[i].path.size());
-        hd_derive_status derivation_status = derive_private_and_public_keys(_ed25519.get(), delta, derived_public_key, metadata.public_key, ZERO, data.chaincode, data.sig_data[i].path.data(), data.sig_data[i].path.size());
-        if (derivation_status != HD_DERIVE_SUCCESS)
+
+        if (data.sig_data[i].path.size())
         {
-            LOG_ERROR("failed to derive public key for block %lu, error %d", i, derivation_status);
-            throw cosigner_exception(cosigner_exception::INTERNAL_ERROR);
+            hd_derive_status derivation_status = derive_private_and_public_keys(_ed25519.get(), delta, derived_public_key, metadata.public_key, ZERO, data.chaincode, data.sig_data[i].path.data(), data.sig_data[i].path.size());
+            if (derivation_status != HD_DERIVE_SUCCESS)
+            {
+                LOG_ERROR("failed to derive public key for block %lu, error %d", i, derivation_status);
+                throw cosigner_exception(cosigner_exception::INTERNAL_ERROR);
+            }
         }
+        else
+            memcpy(derived_public_key, metadata.public_key, sizeof(elliptic_curve256_point_t));
 
         ed25519_le_scalar_t k;
         throw_cosigner_exception(ed25519_calc_hram(ed25519, &k, (const ed25519_point_t*)&data.sig_data[i].R.data, (const ed25519_point_t*)&derived_public_key, (const uint8_t*)data.sig_data[i].message.data(), data.sig_data[i].message.size(), data.sig_data[i].flags & EDDSA_KECCAK));
 
-        if (data.signers_ids.size() > 1)
+        if (data.sig_data[i].path.size() && data.signers_ids.size() > 1)
         {
             elliptic_curve256_scalar_t inv = {0};
             inv[sizeof(elliptic_curve256_scalar_t) - 1] = (uint8_t)data.signers_ids.size();
             throw_cosigner_exception(ed25519_algebra_inverse(ed25519, &inv, &inv));
             throw_cosigner_exception(ed25519_algebra_mul_scalars(ed25519, &delta, delta, sizeof(elliptic_curve256_scalar_t), inv, sizeof(elliptic_curve256_scalar_t)));
         }
-
-        elliptic_curve_scalar x;
-        cosigner_sign_algorithm algo;
-        _key_persistency.load_key(data.key_id, algo, x.data);
+        memcpy(x.data, share.data, sizeof(elliptic_curve256_scalar_t));
         throw_cosigner_exception(ed25519_algebra_add_scalars(ed25519, &x.data, delta, sizeof(elliptic_curve256_scalar_t), x.data, sizeof(elliptic_curve256_scalar_t)));
         throw_cosigner_exception(ed25519_algebra_be_to_le(&x.data, &x.data));
         elliptic_curve_scalar s;
@@ -311,7 +312,7 @@ uint64_t eddsa_online_signing_service::get_eddsa_signature(const std::string& tx
     if (s.size() != data.signers_ids.size())
     {
         LOG_ERROR("got wrong number of s, got %lu expected %lu", s.size(), data.signers_ids.size());
-        throw cosigner_exception(cosigner_exception::INVALID_PARAMETERS); 
+        throw cosigner_exception(cosigner_exception::INVALID_PARAMETERS);
     }
     const std::vector<elliptic_curve_scalar>* my_s = NULL;
     for (auto i = data.signers_ids.begin(); i != data.signers_ids.end(); ++i)
@@ -343,7 +344,7 @@ uint64_t eddsa_online_signing_service::get_eddsa_signature(const std::string& tx
 
     cmp_key_metadata metadata;
     _key_persistency.load_key_metadata(data.key_id, metadata, false);
-    
+
     for (size_t index = 0; index < data.sig_data.size(); ++index)
     {
         if (memcmp(my_s->at(index).data, &data.sig_data[index].s.data, sizeof(elliptic_curve_scalar)) != 0)
@@ -356,7 +357,7 @@ uint64_t eddsa_online_signing_service::get_eddsa_signature(const std::string& tx
 
         for (auto i = s.begin(); i != s.end(); ++i)
             throw_cosigner_exception(algebra->add_scalars(algebra, &s_sum, s_sum, sizeof(elliptic_curve256_scalar_t), i->second[index].data, sizeof(elliptic_curve256_scalar_t)));
-        
+
         eddsa_signature cur_sig;
         memcpy(cur_sig.R, data.sig_data[index].R.data, sizeof(ed25519_point_t));
         ed25519_algebra_be_to_le(&cur_sig.s, &s_sum);
@@ -385,12 +386,11 @@ uint64_t eddsa_online_signing_service::get_eddsa_signature(const std::string& tx
         sig.push_back(cur_sig);
     }
 
-    _signing_persistency.delete_signing_data(txid);
+    _signing_persistency.delete_temporary_signing_data(txid);
 
     const std::optional<const uint64_t> diff = _timing_map.extract(txid);
     if (!diff)
     {
-        LOG_WARN("transaction %s is missing from timing map??", txid.c_str());
         LOG_INFO("Finished signing transaction %s", txid.c_str());
     }
     else

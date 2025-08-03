@@ -11,11 +11,7 @@
 #include <map>
 #include <memory>
 
-namespace fireblocks
-{
-namespace common
-{
-namespace cosigner
+namespace fireblocks::common::cosigner
 {
 
 namespace mta
@@ -74,7 +70,7 @@ struct ecdsa_signing_public_data
     byte_vector_t gamma_commitment;
 };
 
-struct ecdsa_signing_data
+struct ecdsa_preprocessing_data
 {
     elliptic_curve_scalar k;
     elliptic_curve_scalar gamma;
@@ -86,7 +82,7 @@ struct ecdsa_signing_data
     byte_vector_t mta_request;
     std::map<uint64_t, byte_vector_t> G_proofs;
     std::map<uint64_t, ecdsa_signing_public_data> public_data;
-    ~ecdsa_signing_data() {OPENSSL_cleanse(k.data, sizeof(ecdsa_signing_data));}
+    ~ecdsa_preprocessing_data() {OPENSSL_cleanse(k.data, sizeof(ecdsa_preprocessing_data));}
 };
 
 // this class holds the common functionality for cmp_ecdsa_online_signing_service and cmp_ecdsa_offline_signing_service
@@ -96,13 +92,31 @@ protected:
     cmp_ecdsa_signing_service(platform_service& service, const cmp_key_persistency& key_persistency) : _service(service), _key_persistency(key_persistency) {}
     virtual ~cmp_ecdsa_signing_service();
 
-    static cmp_mta_request create_mta_request(ecdsa_signing_data& data, const elliptic_curve256_algebra_ctx_t* algebra, uint64_t my_id, const std::vector<uint8_t>& aad, const cmp_key_metadata& metadata, const std::shared_ptr<paillier_public_key_t>& paillier);
+    static cmp_mta_request create_mta_request(ecdsa_preprocessing_data& data, const elliptic_curve256_algebra_ctx_t* algebra, uint64_t my_id, const std::vector<uint8_t>& aad, const cmp_key_metadata& metadata, const std::shared_ptr<paillier_public_key_t>& paillier);
     static void ack_mta_request(uint32_t count, const std::map<uint64_t, std::vector<cmp_mta_request>>& requests, const std::set<uint64_t>& player_ids, commitments_sha256_t& ack);
-    static cmp_mta_response create_mta_response(ecdsa_signing_data& data, const elliptic_curve256_algebra_ctx_t* algebra, uint64_t my_id, const std::vector<uint8_t>& aad, const cmp_key_metadata& metadata,
-        const std::map<uint64_t, std::vector<cmp_mta_request>>& requests, size_t index, const elliptic_curve_scalar& key, const auxiliary_keys& aux_keys);
-    static cmp_mta_deltas mta_verify(ecdsa_signing_data& data, const elliptic_curve256_algebra_ctx_t* algebra, uint64_t my_id, const std::string& uuid, const std::vector<uint8_t>& aad, const cmp_key_metadata& metadata,
-        const std::map<uint64_t, cmp_mta_responses>& mta_responses, size_t index, const auxiliary_keys& aux_keys, std::map<uint64_t, std::unique_ptr<mta::base_response_verifier>>& verifiers);
-    static void calc_R(ecdsa_signing_data& data, elliptic_curve_point& R, const elliptic_curve256_algebra_ctx_t* algebra, uint64_t my_id, const std::string& uuid, const cmp_key_metadata& metadata,
+    
+    static cmp_mta_response create_mta_response(ecdsa_preprocessing_data& data, 
+                                                const elliptic_curve256_algebra_ctx_t* algebra, 
+                                                uint64_t my_id, 
+                                                const std::vector<uint8_t>& aad, 
+                                                const cmp_key_metadata& metadata,
+                                                const std::map<uint64_t, std::vector<cmp_mta_request>>& requests, 
+                                                size_t index, 
+                                                const elliptic_curve_scalar& key, 
+                                                const auxiliary_keys& aux_keys);
+
+    static cmp_mta_deltas verify_block_and_get_delta(ecdsa_preprocessing_data& data, 
+                                                     const elliptic_curve256_algebra_ctx_t* algebra, 
+                                                     uint64_t my_id, 
+                                                     const std::string& uuid, 
+                                                     const std::vector<uint8_t>& aad, 
+                                                     const cmp_key_metadata& metadata,
+                                                     const std::map<uint64_t, cmp_mta_responses>& mta_responses, 
+                                                     size_t index, 
+                                                     const auxiliary_keys& aux_keys, 
+                                                     std::map<uint64_t, std::unique_ptr<mta::base_response_verifier>>& verifiers);
+
+    static void calc_R(ecdsa_preprocessing_data& data, elliptic_curve_point& R, const elliptic_curve256_algebra_ctx_t* algebra, uint64_t my_id, const std::string& uuid, const cmp_key_metadata& metadata,
         const std::map<uint64_t, std::vector<cmp_mta_deltas>>& deltas, size_t index);
 
     static elliptic_curve_scalar derivation_key_delta(const elliptic_curve256_algebra_ctx_t* algebra, const elliptic_curve256_point_t& public_key, const HDChaincode& chaincode, const std::vector<uint32_t>& path);
@@ -151,8 +165,12 @@ protected:
     static const std::unique_ptr<elliptic_curve256_algebra_ctx_t, void(*)(elliptic_curve256_algebra_ctx_t*)> _secp256k1;
     static const std::unique_ptr<elliptic_curve256_algebra_ctx_t, void(*)(elliptic_curve256_algebra_ctx_t*)> _secp256r1;
     static const std::unique_ptr<elliptic_curve256_algebra_ctx_t, void(*)(elliptic_curve256_algebra_ctx_t*)> _stark;
+    
+protected:
+
+    size_t get_min_mta_batch_size_threshold() const;
+
 };
 
-}
-}
+
 }

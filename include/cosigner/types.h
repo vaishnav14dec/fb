@@ -90,6 +90,12 @@ struct eddsa_signature
     ed25519_scalar_t s;
 };
 
+struct player
+{
+    std::string id;
+    std::string type;
+};
+
 }
 }
 }

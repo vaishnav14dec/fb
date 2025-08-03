@@ -49,6 +49,8 @@ COSIGNER_EXPORT verifiable_secret_sharing_status verifiable_secret_sharing_split
 
 /* Gets a spesific share (zero indexed) from initialized shares */
 COSIGNER_EXPORT verifiable_secret_sharing_status verifiable_secret_sharing_get_share(const verifiable_secret_sharing_t *shares, uint8_t index, shamir_secret_share_t *share);
+/* Gets the ID of a spesific share (zero indexed) from initialized shares */
+COSIGNER_EXPORT verifiable_secret_sharing_status verifiable_secret_sharing_get_share_id(const verifiable_secret_sharing_t *shares, uint8_t index, uint64_t* id);
 /* Gets a spesific share and it's zero knowledge proof (zero indexed) from initialized shares */
 COSIGNER_EXPORT verifiable_secret_sharing_status verifiable_secret_sharing_get_share_and_proof(const verifiable_secret_sharing_t *shares, uint8_t index, shamir_secret_share_t *share, elliptic_curve256_point_t *proof);
 /* Gets a commitment for all shares */

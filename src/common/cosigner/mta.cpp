@@ -1,9 +1,12 @@
 #include "mta.h"
-#include "cosigner/cmp_key_persistency.h"
-#include "cosigner/cosigner_exception.h"
-#include "crypto/zero_knowledge_proof/range_proofs.h"
-#include "crypto/drng/drng.h"
+#include "crypto/paillier_commitment/paillier_commitment.h"
+#include "../crypto/paillier_commitment/paillier_commitment_internal.h"
 #include "../crypto/paillier/paillier_internal.h"
+#include "../crypto/commitments/ring_pedersen_internal.h"
+#include "../crypto/algebra_utils/algebra_utils.h"
+#include "crypto/drng/drng.h"
+#include "cosigner/cmp_key_persistency.h"
+#include "crypto/zero_knowledge_proof/range_proofs.h"
 
 #ifndef TEST_ONLY
 #include "logging/logging_t.h"
@@ -11,12 +14,12 @@
 #define LOG_ERROR(message, ...) printf((message), ##__VA_ARGS__);putchar('\n')
 #endif
 
+#include <assert.h>
+#include <inttypes.h>
 #include <openssl/bn.h>
 #include <openssl/rand.h>
 #include <openssl/err.h>
-
-#include <assert.h>
-#include <inttypes.h>
+#include <openssl/sha.h>
 
 namespace fireblocks
 {
@@ -26,6 +29,19 @@ namespace cosigner
 {
 namespace mta
 {
+
+static void throw_cosigner_exception(drng_status status)
+{
+    switch (status)
+    {
+        case DRNG_SUCCESS: return;
+        case DRNG_INVALID_PARAMETER: throw cosigner_exception(cosigner_exception::INVALID_PARAMETERS);
+        case DRNG_OUT_OF_MEMORY: throw cosigner_exception(cosigner_exception::NO_MEM);
+        case DRNG_INTERNAL_ERROR:
+        default: throw cosigner_exception(cosigner_exception::INTERNAL_ERROR);
+    }
+}
+
 
 static const uint32_t MTA_ZKP_EPSILON_SIZE = 2 * sizeof(elliptic_curve256_scalar_t);
 static const char MTA_ZKP_SALT[] = "Affine Operation with Group Commitment in Range ZK";
@@ -82,23 +98,33 @@ static inline void genarate_mta_range_zkp_seed(const cmp_mta_message& response, 
     SHA256_Update(&ctx, aad.data(), aad.size());
     SHA256_Update(&ctx, response.message.data(), response.message.size());
     SHA256_Update(&ctx, response.commitment.data(), response.commitment.size());
-    uint32_t max_size = std::max(BN_num_bytes(proof.A), BN_num_bytes(proof.By)); // we assome the the paillier n is larger then ring pedersen n
-    std::vector<uint8_t> n(max_size);
+    
+    std::vector<uint8_t> n(BN_num_bytes(proof.A));
     BN_bn2bin(proof.A, n.data());
-    SHA256_Update(&ctx, n.data(), BN_num_bytes(proof.S));
+    SHA256_Update(&ctx, n.data(), BN_num_bytes(proof.S)); // right size of S is ensured during serialization
+    
     SHA256_Update(&ctx, proof.Bx, sizeof(elliptic_curve256_point_t));
+
+    n.resize(BN_num_bytes(proof.By));
     BN_bn2bin(proof.By, n.data());
     SHA256_Update(&ctx, n.data(), BN_num_bytes(proof.By));
-    if ((uint32_t)BN_num_bytes(proof.E) > max_size) // should never happen
-        n.resize(BN_num_bytes(proof.E));
+    
+    n.resize(BN_num_bytes(proof.E));
     BN_bn2bin(proof.E, n.data());
     SHA256_Update(&ctx, n.data(), BN_num_bytes(proof.E));
+
+    n.resize(BN_num_bytes(proof.F));
     BN_bn2bin(proof.F, n.data());
     SHA256_Update(&ctx, n.data(), BN_num_bytes(proof.F));
+
+    n.resize(BN_num_bytes(proof.S));
     BN_bn2bin(proof.S, n.data());
     SHA256_Update(&ctx, n.data(), BN_num_bytes(proof.S));
+
+    n.resize(BN_num_bytes(proof.T));
     BN_bn2bin(proof.T, n.data());
     SHA256_Update(&ctx, n.data(), BN_num_bytes(proof.T));
+
     SHA256_Final(seed, &ctx);
 }
 
@@ -174,6 +200,8 @@ static inline void deserialize_mta_range_zkp(std::vector<uint8_t> buff, const ri
     const uint32_t ring_pedersen_n_size = BN_num_bytes(ring_pedersen->n);
     const uint32_t paillier_priv_n_size = BN_num_bytes(private_key->pub.n);
     const uint32_t paillier_pub_n_size = BN_num_bytes(public_key->n);
+    static const constexpr uint32_t EPSILON_BYTES = 8; //max bytes that the variables can be smaller
+    
     const uint8_t *ptr = buff.data();
     if (*(uint32_t*)ptr != ring_pedersen_n_size)
     {
@@ -193,32 +221,109 @@ static inline void deserialize_mta_range_zkp(std::vector<uint8_t> buff, const ri
         throw cosigner_exception(cosigner_exception::INVALID_PARAMETERS);
     }
     ptr += sizeof(uint32_t);
-    BN_bin2bn(ptr, paillier_pub_n_size * 2, proof.A);
-    ptr += paillier_pub_n_size * 2;
+    if (!BN_bin2bn(ptr, paillier_pub_n_size * 2, proof.A))
+    {
+        throw cosigner_exception(cosigner_exception::NO_MEM);
+    }
+    ptr += paillier_pub_n_size * 2;    
+    if (static_cast<uint32_t>(BN_num_bytes(proof.A)) < paillier_pub_n_size * 2 - EPSILON_BYTES)
+    {
+        LOG_ERROR("Proof A too small. Expected to be at %u >= %u", static_cast<uint32_t>(BN_num_bytes(proof.A)), paillier_pub_n_size * 2 - EPSILON_BYTES);
+        throw cosigner_exception(cosigner_exception::INVALID_PARAMETERS);
+    }
+
     memcpy(proof.Bx, ptr, sizeof(elliptic_curve256_point_t));
     ptr += sizeof(elliptic_curve256_point_t);
-    BN_bin2bn(ptr, paillier_priv_n_size * 2, proof.By);
-    ptr += paillier_priv_n_size * 2;
-    BN_bin2bn(ptr, ring_pedersen_n_size, proof.E);
-    ptr += ring_pedersen_n_size;
-    BN_bin2bn(ptr, ring_pedersen_n_size, proof.F);
-    ptr += ring_pedersen_n_size;
-    BN_bin2bn(ptr, ring_pedersen_n_size, proof.S);
-    ptr += ring_pedersen_n_size;
-    BN_bin2bn(ptr, ring_pedersen_n_size, proof.T);
-    ptr += ring_pedersen_n_size;
 
-    BN_bin2bn(ptr, MTA_ZKP_EPSILON_SIZE + sizeof(elliptic_curve256_scalar_t) + 1, proof.z1);
+    if (!BN_bin2bn(ptr, paillier_priv_n_size * 2, proof.By))
+    {
+        throw cosigner_exception(cosigner_exception::NO_MEM);
+    }
+    ptr += paillier_priv_n_size * 2;
+    if (static_cast<uint32_t>(BN_num_bytes(proof.By)) < paillier_pub_n_size * 2 - EPSILON_BYTES)
+    {
+        LOG_ERROR("Proof By too small. Expected to be at %u >= %u", static_cast<uint32_t>(BN_num_bytes(proof.By)), paillier_pub_n_size * 2 - EPSILON_BYTES);
+        throw cosigner_exception(cosigner_exception::INVALID_PARAMETERS);
+    }
+
+    if (!BN_bin2bn(ptr, ring_pedersen_n_size, proof.E))
+    {
+        throw cosigner_exception(cosigner_exception::NO_MEM);
+    }
+    ptr += ring_pedersen_n_size;
+    if (static_cast<uint32_t>(BN_num_bytes(proof.E)) < ring_pedersen_n_size - EPSILON_BYTES)
+    {
+        LOG_ERROR("Proof E too small. Expected to be at %u >= %u", static_cast<uint32_t>(BN_num_bytes(proof.E)), ring_pedersen_n_size - EPSILON_BYTES);
+        throw cosigner_exception(cosigner_exception::INVALID_PARAMETERS);
+    }
+
+    if (!BN_bin2bn(ptr, ring_pedersen_n_size, proof.F))
+    {
+        throw cosigner_exception(cosigner_exception::NO_MEM);
+    }
+    ptr += ring_pedersen_n_size;
+    if (static_cast<uint32_t>(BN_num_bytes(proof.F)) < ring_pedersen_n_size - EPSILON_BYTES)
+    {
+        LOG_ERROR("Proof F too small. Expected to be at %u >= %u", static_cast<uint32_t>(BN_num_bytes(proof.F)), ring_pedersen_n_size - EPSILON_BYTES);
+        throw cosigner_exception(cosigner_exception::INVALID_PARAMETERS);
+    }
+
+    if (!BN_bin2bn(ptr, ring_pedersen_n_size, proof.S))
+    {
+        throw cosigner_exception(cosigner_exception::NO_MEM);
+    }
+    ptr += ring_pedersen_n_size;
+    if (static_cast<uint32_t>(BN_num_bytes(proof.S)) < ring_pedersen_n_size - EPSILON_BYTES)
+    {
+        LOG_ERROR("Proof S too small. Expected to be at %u >= %u", static_cast<uint32_t>(BN_num_bytes(proof.S)), ring_pedersen_n_size - EPSILON_BYTES);
+        throw cosigner_exception(cosigner_exception::INVALID_PARAMETERS);
+    }
+
+    if (!BN_bin2bn(ptr, ring_pedersen_n_size, proof.T))
+    {
+        throw cosigner_exception(cosigner_exception::NO_MEM);
+    }
+    ptr += ring_pedersen_n_size;
+    if (static_cast<uint32_t>(BN_num_bytes(proof.T)) < ring_pedersen_n_size - EPSILON_BYTES)
+    {
+        LOG_ERROR("Proof T too small. Expected to be at %u >= %u", static_cast<uint32_t>(BN_num_bytes(proof.T)), ring_pedersen_n_size - EPSILON_BYTES);
+        throw cosigner_exception(cosigner_exception::INVALID_PARAMETERS);
+    }
+
+    if (!BN_bin2bn(ptr, MTA_ZKP_EPSILON_SIZE + sizeof(elliptic_curve256_scalar_t) + 1, proof.z1))
+    {
+        throw cosigner_exception(cosigner_exception::NO_MEM);
+    }
     ptr += MTA_ZKP_EPSILON_SIZE + sizeof(elliptic_curve256_scalar_t) + 1;
-    BN_bin2bn(ptr, MTA_ZKP_EPSILON_SIZE + sizeof(elliptic_curve256_scalar_t) * BETA_HIDING_FACTOR + 1, proof.z2);
+
+    if (!BN_bin2bn(ptr, MTA_ZKP_EPSILON_SIZE + sizeof(elliptic_curve256_scalar_t) * BETA_HIDING_FACTOR + 1, proof.z2))
+    {
+        throw cosigner_exception(cosigner_exception::NO_MEM);
+    }
     ptr += MTA_ZKP_EPSILON_SIZE + sizeof(elliptic_curve256_scalar_t) * BETA_HIDING_FACTOR + 1;
-    BN_bin2bn(ptr, MTA_ZKP_EPSILON_SIZE + sizeof(elliptic_curve256_scalar_t) + BN_num_bytes(ring_pedersen->n) + 1, proof.z3);
+
+    if (!BN_bin2bn(ptr, MTA_ZKP_EPSILON_SIZE + sizeof(elliptic_curve256_scalar_t) + BN_num_bytes(ring_pedersen->n) + 1, proof.z3))
+    {
+        throw cosigner_exception(cosigner_exception::NO_MEM);
+    }
     ptr += MTA_ZKP_EPSILON_SIZE + sizeof(elliptic_curve256_scalar_t) + BN_num_bytes(ring_pedersen->n) + 1;
-    BN_bin2bn(ptr, MTA_ZKP_EPSILON_SIZE + sizeof(elliptic_curve256_scalar_t) + BN_num_bytes(ring_pedersen->n) + 1, proof.z4);
+
+    if (!BN_bin2bn(ptr, MTA_ZKP_EPSILON_SIZE + sizeof(elliptic_curve256_scalar_t) + BN_num_bytes(ring_pedersen->n) + 1, proof.z4))
+    {
+        throw cosigner_exception(cosigner_exception::NO_MEM);
+    }
     ptr += MTA_ZKP_EPSILON_SIZE + sizeof(elliptic_curve256_scalar_t) + BN_num_bytes(ring_pedersen->n) + 1;
-    BN_bin2bn(ptr, paillier_pub_n_size, proof.w);
+
+    if (!BN_bin2bn(ptr, paillier_pub_n_size, proof.w))
+    {
+        throw cosigner_exception(cosigner_exception::NO_MEM);
+    }
     ptr += paillier_pub_n_size;
-    BN_bin2bn(ptr, paillier_priv_n_size, proof.wy);
+    
+    if (!BN_bin2bn(ptr, paillier_priv_n_size, proof.wy))
+    {
+        throw cosigner_exception(cosigner_exception::NO_MEM);
+    }
     buff.clear();
 }
 
@@ -379,7 +484,7 @@ static std::vector<uint8_t> mta_range_generate_zkp(const elliptic_curve256_algeb
     do
     {
         elliptic_curve256_scalar_t val;
-        drng_read_deterministic_rand(rng, val, sizeof(elliptic_curve256_scalar_t));
+        throw_cosigner_exception(drng_read_deterministic_rand(rng, val, sizeof(elliptic_curve256_scalar_t)));
         if (!BN_bin2bn(val, sizeof(elliptic_curve256_scalar_t), e))
         {
             LOG_ERROR("Failed to load e, error %lu", ERR_get_error());
@@ -747,7 +852,7 @@ void batch_response_verifier::process(
     elliptic_curve256_scalar_t val;
     do
     {
-        drng_read_deterministic_rand(rng, val, sizeof(elliptic_curve256_scalar_t));
+        throw_cosigner_exception(drng_read_deterministic_rand(rng, val, sizeof(elliptic_curve256_scalar_t)));
         if (!BN_bin2bn(val, sizeof(elliptic_curve256_scalar_t), e))
         {
             LOG_ERROR("Failed to load e, error %lu", ERR_get_error());
@@ -997,7 +1102,7 @@ void batch_response_verifier::process_ring_pedersen(const BIGNUM* e, const mta_r
     {
         throw cosigner_exception(cosigner_exception::NO_MEM);
     }
-    
+
     if (!RAND_bytes(gamma, 2 * sizeof(uint64_t)))
     {
         LOG_ERROR("Failed to get random number, error %lu", ERR_get_error());
@@ -1350,7 +1455,7 @@ void single_response_verifier::process(const byte_vector_t& request, cmp_mta_mes
     elliptic_curve256_scalar_t val;
     do
     {
-        drng_read_deterministic_rand(rng, val, sizeof(elliptic_curve256_scalar_t));
+        throw_cosigner_exception(drng_read_deterministic_rand(rng, val, sizeof(elliptic_curve256_scalar_t)));
         if (!BN_bin2bn(val, sizeof(elliptic_curve256_scalar_t), e))
         {
             LOG_ERROR("Failed to load e, error %lu", ERR_get_error());

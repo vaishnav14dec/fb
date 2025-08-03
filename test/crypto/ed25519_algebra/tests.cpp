@@ -630,4 +630,24 @@ TEST_CASE( "calc_hram", "ed25519") {
         REQUIRE(ed25519_calc_hram(ctx, &hram, &R, &public_key, NULL, sizeof(message), 0) == ELLIPTIC_CURVE_ALGEBRA_INVALID_PARAMETER);
         REQUIRE(ed25519_calc_hram(ctx, &hram, &R, &public_key, message, 0, 0) == ELLIPTIC_CURVE_ALGEBRA_INVALID_PARAMETER);
     }
+    ed25519_algebra_ctx_free(ctx);
+}
+TEST_CASE( "hash_on_curve" ) {
+    elliptic_curve256_point_t res;
+    elliptic_curve256_point_t res2;
+    uint8_t msg[] = "Some example message";
+    elliptic_curve256_algebra_ctx_t* ed25519 = elliptic_curve256_new_ed25519_algebra();
+    REQUIRE(ed25519);
+    SECTION("TestVector#1") {
+        REQUIRE(ed25519->hash_on_curve(ed25519, &res, msg, sizeof(msg)) == ELLIPTIC_CURVE_ALGEBRA_SUCCESS);
+        REQUIRE(ed25519->add_points(ed25519, &res2, &res, &res) == ELLIPTIC_CURVE_ALGEBRA_SUCCESS);
+        REQUIRE(ed25519->hash_on_curve(ed25519, &res2, msg, sizeof(msg)) == ELLIPTIC_CURVE_ALGEBRA_SUCCESS);
+        REQUIRE(memcmp(res, res2, sizeof(elliptic_curve256_point_t)) == 0);
+
+        REQUIRE(ed25519->hash_on_curve(ed25519, &res2, NULL, 0) == ELLIPTIC_CURVE_ALGEBRA_SUCCESS);
+        REQUIRE(ed25519->hash_on_curve(ed25519, &res, NULL, 0) == ELLIPTIC_CURVE_ALGEBRA_SUCCESS);
+        REQUIRE(memcmp(res, res2, sizeof(elliptic_curve256_point_t)) == 0);
+    }
+   
+    elliptic_curve256_algebra_ctx_free(ed25519);
 }

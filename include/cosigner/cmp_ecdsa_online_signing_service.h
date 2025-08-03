@@ -12,7 +12,7 @@ namespace common
 namespace cosigner
 {
 
-struct cmp_signature_data : public ecdsa_signing_data
+struct cmp_signature_data : public ecdsa_preprocessing_data
 {
     uint32_t flags;
     elliptic_curve256_scalar_t message;
@@ -42,7 +42,7 @@ public:
         virtual void store_cmp_signing_data(const std::string& txid, const cmp_signing_metadata& data) = 0;
         virtual void load_cmp_signing_data(const std::string& txid, cmp_signing_metadata& data) const = 0;
         virtual void update_cmp_signing_data(const std::string& txid, const cmp_signing_metadata& data) = 0;
-        virtual void delete_signing_data(const std::string& txid) = 0;
+        virtual void delete_temporary_signing_data(const std::string& txid) = 0;
     };
 
     cmp_ecdsa_online_signing_service(platform_service& service, const cmp_key_persistency& key_persistency, signing_persistency& persistency);

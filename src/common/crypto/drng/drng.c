@@ -1,8 +1,8 @@
 #include "crypto/drng/drng.h"
 #include <stdlib.h>
 #include <string.h>
-#include <openssl/sha.h>
 #include <openssl/crypto.h>
+#include <openssl/sha.h>
 
 struct drng
 {
@@ -27,7 +27,6 @@ drng_status drng_new(const uint8_t *seed, uint32_t seed_len, drng_t **rng)
         return DRNG_OUT_OF_MEMORY;
     }
         
-    
     local_rng->pos = 0;
     SHA512(seed, seed_len, local_rng->data); // data and seed are continuous in memory so SHA512 function will initialize both the data and the seed for the next operation
     *rng = local_rng;
@@ -50,7 +49,6 @@ drng_status drng_read_deterministic_rand(drng_t *rng, uint8_t *rand, uint32_t le
         return DRNG_INVALID_PARAMETER;
     }
         
-
     // prevent buffer overflow / memory corruption in case rand buffer points to the drng data structure
     if ((rand >= rng->data && rand <= (uint8_t*)(rng + 1)) ||
         (rand < rng->data && rand + length_in_bytes > (uint8_t*)rng))

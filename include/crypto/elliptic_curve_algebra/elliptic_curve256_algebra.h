@@ -42,6 +42,7 @@ typedef elliptic_curve_algebra_status (*elliptic_curve256_mul_scalars)(const str
 typedef elliptic_curve_algebra_status (*elliptic_curve256_inverse)(const struct elliptic_curve256_algebra_ctx *ctx, elliptic_curve256_scalar_t *res, const elliptic_curve256_scalar_t *val);
 typedef elliptic_curve_algebra_status (*elliptic_curve256_rand)(const struct elliptic_curve256_algebra_ctx *ctx, elliptic_curve256_scalar_t *res);
 typedef elliptic_curve_algebra_status (*elliptic_curve256_reduce)(const struct elliptic_curve256_algebra_ctx *ctx, elliptic_curve256_scalar_t *res, const elliptic_curve256_scalar_t *val);
+typedef elliptic_curve_algebra_status (*elliptic_curve256_hash_on_curve)(const struct elliptic_curve256_algebra_ctx *ctx, elliptic_curve256_point_t *res, const uint8_t *msg, uint32_t msg_len);
 
 typedef struct elliptic_curve256_algebra_ctx
 {
@@ -69,6 +70,7 @@ typedef struct elliptic_curve256_algebra_ctx
     elliptic_curve256_inverse inverse;
     elliptic_curve256_rand rand;
     elliptic_curve256_reduce reduce;
+    elliptic_curve256_hash_on_curve hash_on_curve;
 
     /* Returns the internal represantation of group order */
     const struct bignum_st *(*order_internal)(const struct elliptic_curve256_algebra_ctx *ctx);

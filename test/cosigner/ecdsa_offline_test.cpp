@@ -59,7 +59,7 @@ private:
     byte_vector_t encrypt_for_player(uint64_t id, const byte_vector_t& data) const override {return data;}
     byte_vector_t decrypt_message(const byte_vector_t& encrypted_data) const override {return encrypted_data;}
     bool backup_key(const std::string& key_id, cosigner_sign_algorithm algorithm, const elliptic_curve256_scalar_t& private_key, const cmp_key_metadata& metadata, const auxiliary_keys& aux) override {return true;}
-    void start_signing(const std::string& key_id, const std::string& txid, const signing_data& data, const std::string& metadata_json, const std::set<std::string>& players) override {}
+    void on_start_signing(const std::string& key_id, const std::string& txid, const signing_data& data, const std::string& metadata_json, const std::set<std::string>& players, const signing_type signature_type) override {}
     void fill_signing_info_from_metadata(const std::string& metadata, std::vector<uint32_t>& flags) const override 
     {
         for (auto i = flags.begin(); i != flags.end(); ++i)
@@ -98,13 +98,13 @@ class preprocessing_persistency : public cmp_ecdsa_offline_signing_service::prep
         data = it->second;
     }
 
-    void store_preprocessing_data(const std::string& request_id, uint64_t index, const ecdsa_signing_data& data) override
+    void store_preprocessing_data(const std::string& request_id, uint64_t index, const ecdsa_preprocessing_data& data) override
     {
         std::unique_lock lock(_mutex);
         _signing_data[request_id][index] = data;
     }
 
-    void load_preprocessing_data(const std::string& request_id, uint64_t index, ecdsa_signing_data& data) const override
+    void load_preprocessing_data(const std::string& request_id, uint64_t index, ecdsa_preprocessing_data& data) const override
     {
         std::shared_lock lock(_mutex);
         auto it = _signing_data.find(request_id);
@@ -167,7 +167,7 @@ class preprocessing_persistency : public cmp_ecdsa_offline_signing_service::prep
 
     mutable std::shared_mutex _mutex;
     std::map<std::string, preprocessing_metadata> _metadata;
-    std::map<std::string, std::map<uint64_t, ecdsa_signing_data>> _signing_data;
+    std::map<std::string, std::map<uint64_t, ecdsa_preprocessing_data>> _signing_data;
     std::map<std::string, std::vector<cmp_signature_preprocessed_data>> _preprocessed_data;
     friend class key_refresh_persistency;
 };
@@ -303,12 +303,15 @@ static void ecdsa_preprocess(std::map<uint64_t, std::unique_ptr<offline_siging_i
     mta_requests.clear();
 
     std::map<uint64_t, std::vector<cmp_mta_deltas>> deltas;
+    auto mta_responses_saved = mta_responses; 
     for (auto i = services.begin(); i != services.end(); ++i)
     {
+        mta_responses = mta_responses_saved;
         auto& delta = deltas[i->first];
         REQUIRE_NOTHROW(i->second->signing_service.offline_mta_verify(request, mta_responses, delta));
 
         std::vector<cmp_mta_deltas> repeat_deltas;
+        mta_responses = mta_responses_saved;
         REQUIRE_THROWS_AS(i->second->signing_service.offline_mta_verify(request, mta_responses, repeat_deltas), cosigner_exception);
     }
     mta_responses.clear();
@@ -360,10 +363,10 @@ static void ecdsa_sign(std::map<uint64_t, std::unique_ptr<offline_siging_info>>&
     {
         auto& sigs = partial_sigs[i->first];
         std::string key_id;
-        REQUIRE_NOTHROW(i->second->signing_service.ecdsa_sign(keyid, txid, data, "", players_str, players_ids, start_index, sigs));
+        REQUIRE_NOTHROW(i->second->signing_service.ecdsa_sign(keyid, txid, data, "", players_str, players_ids, start_index, fireblocks::common::cosigner::MPC_PROTOCOL_VERSION, sigs));
 
         std::vector<recoverable_signature> repeat_sigs;
-        REQUIRE_THROWS_AS(i->second->signing_service.ecdsa_sign(keyid, txid, data, "", players_str, players_ids, start_index, repeat_sigs), cosigner_exception);
+        REQUIRE_THROWS_AS(i->second->signing_service.ecdsa_sign(keyid, txid, data, "", players_str, players_ids, start_index, fireblocks::common::cosigner::MPC_PROTOCOL_VERSION, repeat_sigs), cosigner_exception);
     }
 
     std::vector<recoverable_signature> sigs;
@@ -522,7 +525,7 @@ TEST_CASE("cmp_offline_ecdsa") {
         block.path = path;
         data.blocks.push_back(block);
         std::vector<recoverable_signature> sigs;
-        REQUIRE_THROWS_MATCHES(services.begin()->second->signing_service.ecdsa_sign(keyid, txid, data, "", players_str, players_ids, 0, sigs), cosigner_exception, 
+        REQUIRE_THROWS_MATCHES(services.begin()->second->signing_service.ecdsa_sign(keyid, txid, data, "", players_str, players_ids, 0, fireblocks::common::cosigner::MPC_PROTOCOL_VERSION, sigs), cosigner_exception, 
             Catch::Matchers::Predicate<cosigner_exception>([](const cosigner_exception& e) {return e.error_code() == cosigner_exception::INVALID_PRESIGNING_INDEX;}));
         
         // run 4 times as R has 50% chance of being negative

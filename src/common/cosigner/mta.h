@@ -40,7 +40,7 @@ elliptic_curve_scalar answer_mta_request(const elliptic_curve256_algebra_ctx_t* 
                                          const cmp_mta_message& request, 
                                          const uint8_t* secret, 
                                          uint32_t secret_size, 
-                                         const byte_vector_t& aad, 
+                                         const byte_vector_t& aad,
                                          const std::shared_ptr<paillier_private_key_t>& my_key, 
                                          const std::shared_ptr<paillier_public_key_t>& paillier, 
                                          const std::shared_ptr<ring_pedersen_public_t>& ring_pedersen, 

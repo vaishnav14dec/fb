@@ -52,7 +52,7 @@ public:
         virtual void update_signing_data(const std::string& txid, const eddsa_signing_metadata& data) = 0;
         virtual void store_signing_commitments(const std::string& txid, const std::map<uint64_t, std::vector<commitment>>& commitments) = 0;
         virtual void load_signing_commitments(const std::string& txid, std::map<uint64_t, std::vector<commitment>>& commitments) = 0;
-        virtual void delete_signing_data(const std::string& txid) = 0;
+        virtual void delete_temporary_signing_data(const std::string& txid) = 0;
     };
 
     eddsa_online_signing_service(platform_service& service, const cmp_key_persistency& key_persistency, signing_persistency& preprocessing_persistency);

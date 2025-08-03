@@ -1,4 +1,5 @@
 #include "paillier_internal.h"
+#include "../algebra_utils/algebra_utils.h"
 #include "alpha.h"
 
 #include <string.h>
@@ -116,14 +117,14 @@ long paillier_generate_factorization_zkpok(const paillier_private_key_t *priv,
     {
         return PAILLIER_ERROR_INVALID_PARAM;
     }
-    
+
     n_len = BN_num_bytes(priv->pub.n);
     assert(n_len % PAILLIER_SHA256_LEN == 0);
     if (n_len % PAILLIER_SHA256_LEN != 0)
     {
         return PAILLIER_ERROR_INVALID_KEY;
     }
-    
+
     ctx = BN_CTX_new();
     if (!ctx)
     {
@@ -131,7 +132,7 @@ long paillier_generate_factorization_zkpok(const paillier_private_key_t *priv,
     }
 
     BN_CTX_start(ctx);
-    
+
     A = BN_CTX_get(ctx);
     r = BN_CTX_get(ctx);
     e = BN_CTX_get(ctx);
@@ -148,12 +149,12 @@ long paillier_generate_factorization_zkpok(const paillier_private_key_t *priv,
     {
         goto cleanup;
     }
-    
+
     if (!BN_rshift1(A, priv->pub.n))
     {
         goto cleanup;
     }
-        
+
     if (y_real_len)
     {
         *y_real_len = BN_num_bytes(A);
@@ -164,7 +165,7 @@ long paillier_generate_factorization_zkpok(const paillier_private_key_t *priv,
         ret = PAILLIER_ERROR_BUFFER_TOO_SHORT;
         goto cleanup;
     }
-    
+
     if (!BN_rand_range(r, A))
     {
         goto cleanup;
@@ -181,7 +182,7 @@ long paillier_generate_factorization_zkpok(const paillier_private_key_t *priv,
     {
         goto cleanup;
     }
-    
+
     tmp = (uint8_t*)malloc(n_len);
     if (!tmp)
     {
@@ -215,7 +216,7 @@ long paillier_generate_factorization_zkpok(const paillier_private_key_t *priv,
         {
             deterministic_rand(seed, n_len, z, &seed);
         } while (BN_cmp(z, priv->pub.n) >= 0);
-        
+
         if (!BN_bn2bin(z, tmp))
         {
             goto cleanup;
@@ -234,12 +235,12 @@ long paillier_generate_factorization_zkpok(const paillier_private_key_t *priv,
     SHA256_Final(x, &sha256_ctx);
     SHA512_Update(&sha512_ctx, x, PAILLIER_SHA256_LEN);
     SHA512_Final(sha512_md, &sha512_ctx);
-    
+
     if (!BN_bin2bn(sha512_md, sizeof(sha512_md), e))
     {
         goto cleanup;
     }
-    
+
     if (!BN_usub(bn_y, priv->pub.n, priv->lamda))
     {
         goto cleanup;
@@ -259,7 +260,7 @@ long paillier_generate_factorization_zkpok(const paillier_private_key_t *priv,
     }
 
     ret = PAILLIER_SUCCESS;
-    
+
 cleanup:
     if (ret < 0)
     {
@@ -311,14 +312,14 @@ long paillier_verify_factorization_zkpok(const paillier_public_key_t *pub,
     {
         return PAILLIER_ERROR_INVALID_PARAM;
     }
-    
+
     n_len = BN_num_bytes(pub->n);
     assert(n_len % PAILLIER_SHA256_LEN == 0);
     if (n_len % PAILLIER_SHA256_LEN != 0)
     {
         return PAILLIER_ERROR_INVALID_KEY;
     }
-    
+
     ctx = BN_CTX_new();
     if (!ctx)
     {
@@ -326,7 +327,7 @@ long paillier_verify_factorization_zkpok(const paillier_public_key_t *pub,
     }
 
     BN_CTX_start(ctx);
-    
+
     e = BN_CTX_get(ctx);
     bn_y = BN_CTX_get(ctx);
     exp = BN_CTX_get(ctx);
@@ -353,7 +354,7 @@ long paillier_verify_factorization_zkpok(const paillier_public_key_t *pub,
     {
         goto cleanup;
     }
-    
+
     tmp = (uint8_t*)malloc(n_len);
     if (!tmp)
     {
@@ -385,7 +386,7 @@ long paillier_verify_factorization_zkpok(const paillier_public_key_t *pub,
         {
             deterministic_rand(seed, n_len, z[i], &seed);
         } while (BN_cmp(z[i], pub->n) >= 0);
-        
+
         if (!BN_bn2bin(z[i], tmp))
         {
             goto cleanup;
@@ -394,12 +395,12 @@ long paillier_verify_factorization_zkpok(const paillier_public_key_t *pub,
     }
     SHA512_Update(&sha512_ctx, x, PAILLIER_SHA256_LEN);
     SHA512_Final(sha512_md, &sha512_ctx);
-    
+
     if (!BN_bin2bn(sha512_md, sizeof(sha512_md), e))
     {
         goto cleanup;
     }
-    
+
     if (!BN_bin2bn(y, y_len, bn_y))
     {
         goto cleanup;
@@ -412,7 +413,7 @@ long paillier_verify_factorization_zkpok(const paillier_public_key_t *pub,
     {
         goto cleanup;
     }
-    
+
     if (!BN_lshift1(bn_y, bn_y))
     {
         goto cleanup;
@@ -421,7 +422,7 @@ long paillier_verify_factorization_zkpok(const paillier_public_key_t *pub,
     {
         goto cleanup;
     }
-    
+
     if (BN_cmp(bn_y, pub->n) >= 0)
     {
         ret = PAILLIER_ERROR_INVALID_PROOF;
@@ -457,7 +458,7 @@ long paillier_verify_factorization_zkpok(const paillier_public_key_t *pub,
     SHA256_Final(sha256_md, &sha256_ctx);
 
     ret = (memcmp(x, sha256_md, PAILLIER_SHA256_LEN) == 0) ? PAILLIER_SUCCESS : PAILLIER_ERROR_INVALID_PROOF;
-    
+
 cleanup:
     if (ret < 0)
     {
@@ -498,16 +499,16 @@ long paillier_generate_coprime_zkp(const paillier_private_key_t *priv, const uin
     {
         return PAILLIER_ERROR_INVALID_PARAM;
     }
-    
+
     n_len = BN_num_bytes(priv->pub.n);
-    
+
     assert(n_len % PAILLIER_SHA256_LEN == 0);
     if (n_len % PAILLIER_SHA256_LEN != 0)
     {
         return PAILLIER_ERROR_INVALID_KEY;
     }
 
-    
+
     if (y_real_len)
     {
         *y_real_len = n_len * COPRIME_ZKP_K;
@@ -525,7 +526,7 @@ long paillier_generate_coprime_zkp(const paillier_private_key_t *priv, const uin
     }
 
     BN_CTX_start(ctx);
-    
+
     x = BN_CTX_get(ctx);
     M = BN_CTX_get(ctx);
     tmp = BN_CTX_get(ctx);
@@ -540,13 +541,13 @@ long paillier_generate_coprime_zkp(const paillier_private_key_t *priv, const uin
     {
         goto cleanup;
     }
-    
+
     BN_set_flags(M, BN_FLG_CONSTTIME);
     if (!BN_mod_inverse(M, priv->pub.n, priv->lamda, ctx))
     {
         goto cleanup;
     }
-    
+
     n = (uint8_t*)malloc(n_len);
     if (!n)
     {
@@ -558,7 +559,7 @@ long paillier_generate_coprime_zkp(const paillier_private_key_t *priv, const uin
     {
         goto cleanup;
     }
-    
+
     SHA256_Init(&sha256_ctx);
     SHA256_Update(&sha256_ctx, COPRIME_ZKP_SALT, sizeof(COPRIME_ZKP_SALT));
     SHA256_Update(&sha256_ctx, n, n_len);
@@ -575,7 +576,7 @@ long paillier_generate_coprime_zkp(const paillier_private_key_t *priv, const uin
     {
         goto cleanup;
     }
-
+        
     for (size_t i = 0; i < COPRIME_ZKP_K; ++i)
     {
         int is_coprime_res;
@@ -589,7 +590,7 @@ long paillier_generate_coprime_zkp(const paillier_private_key_t *priv, const uin
         {
             goto cleanup;
         }
-        
+
         if (!BN_mod_exp_mont(tmp, x, M, priv->pub.n, ctx, mont))
         {
             goto cleanup;
@@ -602,7 +603,7 @@ long paillier_generate_coprime_zkp(const paillier_private_key_t *priv, const uin
             
         y_ptr += n_len;
     }
-    
+
     ret = PAILLIER_SUCCESS;
 
 cleanup:
@@ -646,9 +647,9 @@ long paillier_verify_coprime_zkp(const paillier_public_key_t *pub, const uint8_t
         return PAILLIER_ERROR_INVALID_PARAM;
     }
         
-    
+
     n_len = BN_num_bytes(pub->n);
-    
+
     assert(n_len % PAILLIER_SHA256_LEN == 0);
     if (n_len % PAILLIER_SHA256_LEN != 0)
     {
@@ -660,7 +661,7 @@ long paillier_verify_coprime_zkp(const paillier_public_key_t *pub, const uint8_t
     {
         return PAILLIER_ERROR_INVALID_PARAM;
     }
-    
+
     ctx = BN_CTX_new();
     if (!ctx)
     {
@@ -668,9 +669,14 @@ long paillier_verify_coprime_zkp(const paillier_public_key_t *pub, const uint8_t
     }
 
     BN_CTX_start(ctx);
-    
-    if (BN_is_prime_ex(pub->n, 256, ctx, NULL))
+
+    // Miller–Rabin primality test initially done 256 times (1/2)^256
+    // we want the prime test to fail, and it MUST fail quickly for non-prime n
+    // (n is not prime, it is p * q)
+    // Note that this test for prime is expected to fail, so we want it to fail fast
+    if (0 != BN_is_prime_fasttest_ex(pub->n, 128, ctx, 1, NULL))
     {
+        // assume n is prime and fail!
         ret = PAILLIER_ERROR_INVALID_KEY;
         goto cleanup;
     }
@@ -689,13 +695,13 @@ long paillier_verify_coprime_zkp(const paillier_public_key_t *pub, const uint8_t
     {
         goto cleanup;
     }
-    
+
     if (!BN_bin2bn(alpha_bin, alpha_bin_len, tmp))
     {
         goto cleanup;
     }
         
-    
+
     if (is_coprime_fast(tmp, pub->n, ctx) != 1)
     {
         ret = PAILLIER_ERROR_INVALID_KEY;
@@ -713,7 +719,7 @@ long paillier_verify_coprime_zkp(const paillier_public_key_t *pub, const uint8_t
         goto cleanup;
     }
         
-    
+
     SHA256_Init(&sha256_ctx);
     SHA256_Update(&sha256_ctx, COPRIME_ZKP_SALT, sizeof(COPRIME_ZKP_SALT));
     SHA256_Update(&sha256_ctx, n, n_len);
@@ -738,7 +744,7 @@ long paillier_verify_coprime_zkp(const paillier_public_key_t *pub, const uint8_t
             deterministic_rand(seed, n_len, x, &seed);
             is_coprime_res = is_coprime_fast(x, pub->n, ctx);
         } while (is_coprime_res == 0);
-        
+
         if (is_coprime_res == -1)
         {
             goto cleanup;
@@ -766,7 +772,7 @@ long paillier_verify_coprime_zkp(const paillier_public_key_t *pub, const uint8_t
         }
         y_ptr += n_len;
     }
-    
+
     ret = PAILLIER_SUCCESS;
 
 cleanup:
@@ -796,7 +802,7 @@ static inline long init_paillier_blum_zkp(zkp_paillier_blum_modulus_proof_t *pro
         if (!proof->x[i] || !proof->z[i])
         {
             return PAILLIER_ERROR_OUT_OF_MEMORY;
-    }
+        }
     }
     return PAILLIER_SUCCESS;
 }
@@ -898,7 +904,7 @@ long paillier_generate_paillier_blum_zkp(const paillier_private_key_t *priv, con
     sha256_md_t seed;
     uint32_t n_len;
     uint32_t needed_proof_len;
-
+    
     // since it is needed to randomly choose one of the 4 roots 
     // in a loop of PAILLIER_BLUM_STATISTICAL_SECURITY iterations
     // there is a need for 2 * PAILLIER_BLUM_STATISTICAL_SECURITY bits. 
@@ -906,7 +912,7 @@ long paillier_generate_paillier_blum_zkp(const paillier_private_key_t *priv, con
     uint8_t random_bytes[(PAILLIER_BLUM_STATISTICAL_SECURITY * 2 + 7) / 8];
 
     long ret = -1;
-
+    
     if (!priv)
     {
         return PAILLIER_ERROR_INVALID_KEY;
@@ -934,7 +940,7 @@ long paillier_generate_paillier_blum_zkp(const paillier_private_key_t *priv, con
     }
     
     OPENSSL_cleanse(serialized_proof, proof_len);
-    
+
     n_len = BN_num_bytes(priv->pub.n);
 
     ctx = BN_CTX_new();
@@ -953,7 +959,7 @@ long paillier_generate_paillier_blum_zkp(const paillier_private_key_t *priv, con
     
     //reset return value so if following statements fail a propper error would be reported
     ret = -1; 
-    
+
     p_remainder = BN_CTX_get(ctx);
     q_remainder = BN_CTX_get(ctx);
     tmp = BN_CTX_get(ctx);
@@ -965,7 +971,7 @@ long paillier_generate_paillier_blum_zkp(const paillier_private_key_t *priv, con
         ret = PAILLIER_ERROR_OUT_OF_MEMORY;
         goto cleanup;
     }
-    
+
     n_inverse_mod_phi_n = BN_CTX_get(ctx);
     if (!n_inverse_mod_phi_n)
     {
@@ -1017,7 +1023,7 @@ long paillier_generate_paillier_blum_zkp(const paillier_private_key_t *priv, con
     {
         goto cleanup;
     }
-
+    
 
     if (!BN_mod_inverse(n_inverse_mod_phi_n, priv->pub.n, priv->lamda, ctx))    // To compute z[i]
     {
@@ -1062,7 +1068,7 @@ long paillier_generate_paillier_blum_zkp(const paillier_private_key_t *priv, con
     
     // Since p = 3[4], then ((p+1)/4)^2 mod (p-1) = (2/4)^2 mod (p-1) = 1/4 mod (p-1)
     // So the exponent ((p+1)/4)^2 can be used to compute 4th root.
-
+    
     if (!BN_add_word(p_exp_4th, 1)) //p_exp_4th = p + 1
     {
         goto cleanup;
@@ -1138,7 +1144,7 @@ long paillier_generate_paillier_blum_zkp(const paillier_private_key_t *priv, con
 
     // Calculate seed for deterministric rand which in turn will be used for generating y values using hash of the current state.
     // This comes instead of receiving y values from the other party
-    
+
     SHA256_Init(&sha256_ctx);
     SHA256_Update(&sha256_ctx, PAILLIER_BLUM_ZKP_SALT, sizeof(PAILLIER_BLUM_ZKP_SALT));
     if (aad)
@@ -1168,7 +1174,7 @@ long paillier_generate_paillier_blum_zkp(const paillier_private_key_t *priv, con
     {
         goto cleanup;
     }    
-    
+
     for (uint32_t i = 0; i < PAILLIER_BLUM_STATISTICAL_SECURITY; ++i)
     {
 
@@ -1185,7 +1191,7 @@ long paillier_generate_paillier_blum_zkp(const paillier_private_key_t *priv, con
         {
             goto cleanup;
         }
-        
+
         // Compute potential 4th root modulo prime, and get legendre symbol 0/1 using 4th power
         // This gives the 4th root of QR-corrected y (namely 8th root of y^2)
         if (!BN_mod(y_mod_pq, y, priv->p, ctx))
@@ -1239,7 +1245,7 @@ long paillier_generate_paillier_blum_zkp(const paillier_private_key_t *priv, con
         {
         case 0:
             // p_4th_root + q_4th_root
-        if (!BN_mod_add_quick(proof.x[i], p_4th_root, q_4th_root, priv->pub.n))
+            if (!BN_mod_add_quick(proof.x[i], p_4th_root, q_4th_root, priv->pub.n))
             {
                 goto cleanup;
             }
@@ -1248,7 +1254,7 @@ long paillier_generate_paillier_blum_zkp(const paillier_private_key_t *priv, con
             // p_4th_root - q_4th_root
             if (!BN_mod_sub_quick(proof.x[i], p_4th_root, q_4th_root, priv->pub.n))
             {
-            goto cleanup;
+                goto cleanup;
             }
             break;
         case 2:
@@ -1268,8 +1274,8 @@ long paillier_generate_paillier_blum_zkp(const paillier_private_key_t *priv, con
             break;
         }
 
-        // According to choice of w above with Jacobi symbol of (-1,1) 
-        proof.a[i] = legendre_q;                   
+        // According to choice of w above with Jacobi symbol of (-1,1)
+        proof.a[i] = legendre_q;
         proof.b[i] = legendre_q != legendre_p;
 
         // Include w in QR-corrected y, namely x^4 = (-1)^a*w^b*y
@@ -1278,8 +1284,8 @@ long paillier_generate_paillier_blum_zkp(const paillier_private_key_t *priv, con
             if (!BN_mod_mul(proof.x[i], proof.x[i], correction, priv->pub.n, ctx))
             {
                 goto cleanup;
+            }
         }
-    }
     }
 
     serialize_paillier_blum_zkp(&proof, n_len, serialized_proof);
@@ -1292,7 +1298,7 @@ cleanup:
     }
 
     //where DUPed - need to be freed explicitly
-    BN_clear_free(p_minus_1);
+    BN_clear_free(p_minus_1); 
     BN_clear_free(q_minus_1);
     BN_clear_free(p_exp_4th);
     BN_clear_free(q_exp_4th);
@@ -1386,7 +1392,7 @@ long paillier_verify_paillier_blum_zkp(const paillier_public_key_t *pub, const u
         return PAILLIER_ERROR_INVALID_KEY;
     }
         
-    
+
     ctx = BN_CTX_new();
     if (!ctx)
     {
@@ -1394,7 +1400,7 @@ long paillier_verify_paillier_blum_zkp(const paillier_public_key_t *pub, const u
     }
 
     BN_CTX_start(ctx);
-    
+
     y = BN_CTX_get(ctx);
     tmp = BN_CTX_get(ctx);
     if (!y || !tmp)
@@ -1402,8 +1408,11 @@ long paillier_verify_paillier_blum_zkp(const paillier_public_key_t *pub, const u
         goto cleanup;
     }
 
-    if (BN_is_prime_ex(pub->n, 256, ctx, NULL))
+    // n must not be prime. It must be p * q
+    // Note that this test for prime is expected to fail, so we want it to fail fast
+    if (0 != BN_is_prime_fasttest_ex(pub->n, 128, ctx, 1, NULL))
     {
+        // consider n as prime and fail
         ret = PAILLIER_ERROR_INVALID_KEY;
         goto cleanup;
     }
@@ -1465,7 +1474,7 @@ long paillier_verify_paillier_blum_zkp(const paillier_public_key_t *pub, const u
         {
             deterministic_rand(seed, n_len, y, &seed);
         } while (BN_cmp(y, pub->n) >= 0);
-        
+
         if (is_coprime_fast(y, pub->n, ctx) != 1)
         {
             ret = PAILLIER_ERROR_INVALID_PROOF;
@@ -1489,14 +1498,14 @@ long paillier_verify_paillier_blum_zkp(const paillier_public_key_t *pub, const u
             
             if (!BN_sub(tmp, pub->n, BN_value_one())) //tmp = n - 1
             {
-            goto cleanup;
+                goto cleanup;
             }
 
             if (0 == BN_cmp(tmp, y)) //check if y == n - 1
-        {
-            ret = PAILLIER_ERROR_INVALID_PROOF;
-            goto cleanup;
-        }
+            {
+                ret = PAILLIER_ERROR_INVALID_PROOF;
+                goto cleanup;
+            }
         }
 
         if (!BN_mod_sqr(tmp, proof.x[i], pub->n, ctx))
@@ -1509,20 +1518,20 @@ long paillier_verify_paillier_blum_zkp(const paillier_public_key_t *pub, const u
             goto cleanup;
         }
             
-        if (proof.b[i]) 
+        if (proof.b[i])
         {
             if (!BN_mod_mul(y, proof.w, y, pub->n, ctx))
             {
                 goto cleanup;
-        }
+            }
         }
 
-        if (proof.a[i]) 
+        if (proof.a[i])
         {
             if (!BN_sub(y, pub->n, y))
             {
                 goto cleanup;
-        }
+            }
         }
 
         if (BN_cmp(tmp, y) != 0)
@@ -1540,7 +1549,7 @@ cleanup:
         ret = ERR_get_error() * -1;
     }
         
-    
+
     BN_CTX_end(ctx);
     BN_CTX_free(ctx);
     return ret;

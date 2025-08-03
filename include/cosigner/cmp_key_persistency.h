@@ -3,6 +3,7 @@
 #include "cosigner_export.h"
 
 #include "cosigner/types.h"
+#include "cosigner/key_persistency_base.h"
 
 #include <map>
 #include <memory>
@@ -27,14 +28,13 @@ struct cmp_player_info
     std::shared_ptr<struct ring_pedersen_public> ring_pedersen;
 };
 
-struct cmp_key_metadata
+struct cmp_key_metadata : public key_metadata_base
 {
-    elliptic_curve256_point_t public_key;
-    uint8_t t;
-    uint8_t n;
-    cosigner_sign_algorithm algorithm;
-    uint64_t ttl;
-    commitments_sha256_t seed;
+    uint8_t t;                              // number of players needed for signature
+    uint8_t n;                              // total number of players
+    uint32_t flags;                         // algorithm specific flags
+    uint64_t ttl;                           // 
+    commitments_sha256_t seed;              // Usually product of hash of some state which is considered random
     std::map<uint64_t, cmp_player_info> players_info;
 };
 

@@ -17,7 +17,7 @@ void throw_cosigner_exception(verifiable_secret_sharing_status status)
 {
     switch (status)
     {
-        case VERIFIABLE_SECRET_SHARING_SUCCESS: return; 
+        case VERIFIABLE_SECRET_SHARING_SUCCESS: return;
         case VERIFIABLE_SECRET_SHARING_INVALID_PARAMETER: throw cosigner_exception(cosigner_exception::INVALID_PARAMETERS);
         case VERIFIABLE_SECRET_SHARING_INVALID_SHARE: throw cosigner_exception(cosigner_exception::INVALID_PARAMETERS);
         case VERIFIABLE_SECRET_SHARING_OUT_OF_MEMORY: throw cosigner_exception(cosigner_exception::NO_MEM);
@@ -50,7 +50,7 @@ void throw_cosigner_exception(commitments_status status)
 {
     switch (status)
     {
-        case COMMITMENTS_SUCCESS: return; 
+        case COMMITMENTS_SUCCESS: return;
         case COMMITMENTS_INVALID_PARAMETER: throw cosigner_exception(cosigner_exception::INVALID_PARAMETERS);
         case COMMITMENTS_INVALID_CONTEXT: throw cosigner_exception(cosigner_exception::INVALID_PARAMETERS);
         case COMMITMENTS_OUT_OF_MEMORY: throw cosigner_exception(cosigner_exception::NO_MEM);
@@ -77,13 +77,19 @@ void throw_cosigner_exception(zero_knowledge_proof_status status)
 void throw_paillier_exception(long status)
 {
     if (status == PAILLIER_SUCCESS)
+    {
         return;
+    }
     else if (status == PAILLIER_ERROR_OUT_OF_MEMORY)
+    {
         throw cosigner_exception(cosigner_exception::NO_MEM);
+    }
+    
     if (PAILLIER_IS_OPENSSL_ERROR(status))
     {
         LOG_ERROR("openssl error %ld in paillier", PAILLIER_TO_OPENSSL_ERROR(status));
     }
+    
     throw cosigner_exception(cosigner_exception::INTERNAL_ERROR);
 }
 
@@ -91,7 +97,7 @@ void throw_cosigner_exception(ring_pedersen_status status)
 {
     switch (status)
     {
-        case RING_PEDERSEN_SUCCESS: return; 
+        case RING_PEDERSEN_SUCCESS: return;
         case RING_PEDERSEN_INVALID_PARAMETER: throw cosigner_exception(cosigner_exception::INVALID_PARAMETERS);
         case RING_PEDERSEN_BUFFER_TOO_SHORT: throw cosigner_exception(cosigner_exception::INVALID_PARAMETERS);
         case RING_PEDERSEN_KEYLEN_TOO_SHORT: throw cosigner_exception(cosigner_exception::INTERNAL_ERROR);
